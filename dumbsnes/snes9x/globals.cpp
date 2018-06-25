@@ -47,10 +47,8 @@
 #include "debug.h"
 #include "apu.h"
 #include "dma.h"
-#include "fxemu.h"
 #include "gfx.h"
 #include "soundux.h"
-#include "cheats.h"
 #include "sa1.h"
 #ifndef _SNESPPC
 //#include "netplay.h"
@@ -107,14 +105,6 @@ long Int32 = 0;
 */
 
 END_EXTERN_C
-
-#ifndef ZSNES_FX
-struct FxInit_s SuperFX;
-#else
-START_EXTERN_C
-uint8 *SFXPlotTable = NULL;
-END_EXTERN_C
-#endif
 
 struct SPPU PPU;
 struct InternalPPU IPPU;
@@ -177,7 +167,6 @@ uint32 current_graphic_format = RGB565;
 #endif
 
 uint8 GetBank = 0;
-struct SCheatData Cheat;
 
 volatile SoundStatus so;
 SSoundData SoundData;

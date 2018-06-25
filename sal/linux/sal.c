@@ -1,12 +1,10 @@
 
 #include <stdio.h>
 #include <dirent.h>
-#include <SDL/SDL.h>
+#include <SDL.h>
 #include <sys/time.h>
 #include "sal.h"
-
-#include <SDL/SDL.h>
-
+#include "rs97_dma.h"
 #define PALETTE_BUFFER_LENGTH	256*2*4
 
 static SDL_Surface *mScreen = NULL;
@@ -57,6 +55,8 @@ static u32 sal_Input(int held)
 		CASE(DOWN, DOWN);
 		CASE(LEFT, LEFT);
 		CASE(RIGHT, RIGHT);
+		CASE(3, MENU);
+		default: break;
 	}
 
 	mInputRepeat = inputHeld;
@@ -156,6 +156,11 @@ u32 sal_InputPoll()
 	return sal_Input(1);
 }
 
+const char* sal_DirectoryGetTemp(void)
+{
+	return "/tmp";
+}
+
 void sal_CpuSpeedSet(u32 mhz)
 {
 
@@ -204,26 +209,21 @@ s32 sal_Init(void)
 	return SAL_OK;
 }
 
-u32 sal_VideoInit(u32 bpp, u32 color, u32 refreshRate)
+u32 sal_VideoInit(u32 bpp)
 {
 	SDL_ShowCursor(0);
-
-	if (mScreen)
-	{
-		if (mBpp == bpp)
-		{
-			return SAL_OK;
-		}
-		SDL_VideoQuit();
-		mScreen=NULL;
-	}
 	
 	mBpp=bpp;
-	mRefreshRate=refreshRate;
 
 	//Set up the screen
-	mScreen = SDL_SetVideoMode( SAL_SCREEN_WIDTH, SAL_SCREEN_HEIGHT, bpp, SDL_HWSURFACE | SDL_DOUBLEBUF);
-
+	mScreen = SDL_SetVideoMode( 320, 480, bpp, SDL_HWSURFACE/* |
+#ifdef SDL_TRIPLEBUF
+		SDL_TRIPLEBUF
+#else
+		SDL_DOUBLEBUF
+#endif*/
+		);
+    dma_map_buffer();
     	//If there was an error in setting up the screen
     	if( mScreen == NULL )
     	{
@@ -240,33 +240,94 @@ u32 sal_VideoInit(u32 bpp, u32 color, u32 refreshRate)
 			return SAL_ERROR;
 		} 
 	}
-
-	sal_VideoClear(color);
-   
-	sal_VideoFlip(1);
    
 	return SAL_OK;
 }
 
+u32 sal_VideoGetWidth()
+{
+	return mScreen->w;
+}
+
+u32 sal_VideoGetHeight()
+{
+	return 240;//mScreen->h; fix for rs-97
+}
+
+u32 sal_VideoGetPitch()
+{
+	return mScreen->pitch * 2; // fix for rs-97
+}
+
+void sal_VideoEnterGame(u32 fullscreenOption, u32 pal, u32 refreshRate)
+{
+#ifdef GCW_ZERO
+	/* Copied from C++ headers which we can't include in C */
+	unsigned int Width = 256 /* SNES_WIDTH */,
+	             Height = pal ? 239 /* SNES_HEIGHT_EXTENDED */ : 224 /* SNES_HEIGHT */;
+	if (fullscreenOption != 3)
+	{
+		Width = SAL_SCREEN_WIDTH;
+		Height = SAL_SCREEN_HEIGHT;
+	}
+	if (SDL_MUSTLOCK(mScreen))
+		SDL_UnlockSurface(mScreen);
+	mScreen = SDL_SetVideoMode(320, 480, mBpp, SDL_HWSURFACE/* |
+#ifdef SDL_TRIPLEBUF
+		SDL_TRIPLEBUF
+#else
+		SDL_DOUBLEBUF
+#endif*/
+		);
+	mRefreshRate = refreshRate;
+	if (SDL_MUSTLOCK(mScreen))
+		SDL_LockSurface(mScreen);
+#endif
+}
+
+void sal_VideoSetPAL(u32 fullscreenOption, u32 pal)
+{
+	if (fullscreenOption == 3) /* hardware scaling */
+	{
+		sal_VideoEnterGame(fullscreenOption, pal, mRefreshRate);
+	}
+}
+
+void sal_VideoExitGame()
+{
+#ifdef GCW_ZERO
+	if (SDL_MUSTLOCK(mScreen))
+		SDL_UnlockSurface(mScreen);
+	mScreen = SDL_SetVideoMode(320, 480, mBpp, SDL_HWSURFACE/* | SDL_DOUBLEBUF*/);
+
+	if (SDL_MUSTLOCK(mScreen))
+		SDL_LockSurface(mScreen);
+#endif
+}
+
+void sal_VideoBitmapDim(u16* img, u32 pixelCount)
+{
+	u32 i;
+	for (i = 0; i < pixelCount; i += 2)
+		*(u32 *) &img[i] = (*(u32 *) &img[i] & 0xF7DEF7DE) >> 1;
+	if (pixelCount & 1)
+		img[i - 1] = (img[i - 1] & 0xF7DE) >> 1;
+}
+
 void sal_VideoFlip(s32 vsync)
 {
-	if (SDL_MUSTLOCK(mScreen)) {
-		SDL_UnlockSurface(mScreen); 
-		SDL_Flip(mScreen);
-		SDL_LockSurface(mScreen);
-	} else
-		SDL_Flip(mScreen);
+	// if (SDL_MUSTLOCK(mScreen)) {
+		// SDL_UnlockSurface(mScreen); 
+		// SDL_Flip(mScreen);
+		// SDL_LockSurface(mScreen);
+	// } else
+		// SDL_Flip(mScreen);
 }
 
-void *sal_VideoGetBuffer()
-{
-	return (void*)mScreen->pixels;
-}
-
-u32 sal_VideoSetScaling(s32 width, s32 height)
-{
-	return SAL_ERROR;
-}
+// void *sal_VideoGetBuffer()
+// {
+	// return (void*)dma_ptr;
+// }
 
 void sal_VideoPaletteSync() 
 { 	
@@ -280,9 +341,9 @@ void sal_VideoPaletteSet(u32 index, u32 color)
 	if(mPaletteCurr>mPaletteEnd) mPaletteCurr=&mPaletteBuffer[0];
 }
 
-
 void sal_Reset(void)
 {
+	dma_unmap_buffer();
 	sal_AudioClose();
 	SDL_Quit();
 }

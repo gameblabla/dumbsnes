@@ -2,3 +2,9 @@
 PocketSNES
 PocketSNES.opk
 .opk_data
+*.zip
+PocketSNES
+dumbsnes-release/
+sal/*.o
+menu/*.o
+dumbsnes/snes9x/*.o

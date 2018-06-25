@@ -50,7 +50,6 @@
 #include "cpuexec.h"
 #include "ppu.h"
 #include "display.h"
-#include "cheats.h"
 #include "apu.h"
 #include "sa1.h"
 #include "srtc.h"
@@ -58,15 +57,6 @@
 
 #include "sal.h"
 #include "menu.h"
-
-#ifndef ZSNES_FX
-#include "fxemu.h"
-extern struct FxInit_s SuperFX;
-#else
-START_EXTERN_C
-extern uint8 *SFXPlotTable;
-END_EXTERN_C
-#endif
 
 static uint8 bytes0x2000 [0x2000];
 
@@ -202,17 +192,7 @@ bool8_32 CMemory::Init ()
     ::ROM    = ROM;
     ::SRAM   = SRAM;
     ::RegRAM = FillRAM;
-
-#ifdef ZSNES_FX
-    SFXPlotTable = ROM + 0x400000;
-#else
-    SuperFX.pvRegisters = &Memory.FillRAM [0x3000];
-    SuperFX.nRamBanks = 1;
-    SuperFX.pvRam = ::SRAM;
-    SuperFX.nRomBanks = (2 * 1024 * 1024) / (32 * 1024);
-    SuperFX.pvRom = (uint8 *) ROM;
-#endif
-
+    
     ZeroMemory (IPPU.TileCached [TILE_2BIT], MAX_2BIT_TILES);
     ZeroMemory (IPPU.TileCached [TILE_4BIT], MAX_4BIT_TILES);
     ZeroMemory (IPPU.TileCached [TILE_8BIT], MAX_8BIT_TILES);
@@ -648,10 +628,6 @@ again:
     }
     FreeSDD1Data ();
     InitROM (Tales);
-	
-    S9xLoadCheatFile (S9xGetFilename(".cht"));
-    S9xInitCheatData ();
-    S9xApplyCheats ();
 
     S9xReset ();
 
@@ -708,9 +684,6 @@ void S9xDeinterleaveMode2 ()
 
 void CMemory::InitROM (bool8_32 Interleaved)
 {
-#ifndef ZSNES_FX
-    SuperFX.nRomBanks = CalculatedSize >> 15;
-#endif
     Settings.MultiPlayer5Master = Settings.MultiPlayer5;
     Settings.MouseMaster = Settings.Mouse;
     Settings.SuperScopeMaster = Settings.SuperScope;
@@ -802,19 +775,6 @@ void CMemory::InitROM (bool8_32 Interleaved)
 	    Settings.C4 = !Settings.ForceNoC4;
 	}
 
-	if (Settings.SuperFX)
-	{
-	    //::SRAM = ROM + 1024 * 1024 * 4;
-	    SuperFXROMMap ();
-	    Settings.MultiPlayer5Master = FALSE;
-	    //Settings.MouseMaster = FALSE;
-	    //Settings.SuperScopeMaster = FALSE;
-	    Settings.DSP1Master = FALSE;
-	    Settings.SA1 = FALSE;
-	    Settings.C4 = FALSE;
-	    Settings.SDD1 = FALSE;
-	}
-	else
 	if (Settings.ForceSA1 ||
 	    (!Settings.ForceNoSA1 && (ROMSpeed & ~0x10) == 0x23 && 
 	     (ROMType & 0xf) > 3 && (ROMType & 0xf0) == 0x30))
@@ -937,12 +897,6 @@ void CMemory::InitROM (bool8_32 Interleaved)
 	*p = 0;
     }
 
-    if (Settings.SuperFX)
-    {
-	SRAMMask = 0xffff;
-	Memory.SRAMSize = 16;
-    }
-    else
     {
 	SRAMMask = Memory.SRAMSize ?
 		    ((1 << (Memory.SRAMSize + 3)) * 128) - 1 : 0;
@@ -1418,93 +1372,6 @@ void CMemory::AlphaROMMap ()
     }
 
     MapRAM ();
-    WriteProtectROM ();
-}
-
-void CMemory::SuperFXROMMap ()
-{
-    int c;
-    int i;
-    
-    // Banks 00->3f and 80->bf
-    for (c = 0; c < 0x400; c += 16)
-    {
-	Map [c + 0] = Map [c + 0x800] = RAM;
-	Map [c + 1] = Map [c + 0x801] = RAM;
-	BlockIsRAM [c + 0] = BlockIsRAM [c + 0x800] = TRUE;
-	BlockIsRAM [c + 1] = BlockIsRAM [c + 0x801] = TRUE;
-
-	Map [c + 2] = Map [c + 0x802] = (uint8 *) MAP_PPU;
-	Map [c + 3] = Map [c + 0x803] = (uint8 *) MAP_PPU;
-	Map [c + 4] = Map [c + 0x804] = (uint8 *) MAP_CPU;
-	Map [c + 5] = Map [c + 0x805] = (uint8 *) MAP_CPU;
-	Map [c + 6] = Map [c + 0x806] = (uint8 *) MAP_DSP;
-	Map [c + 7] = Map [c + 0x807] = (uint8 *) MAP_DSP;
-	for (i = c + 8; i < c + 16; i++)
-	{
-	    Map [i] = Map [i + 0x800] = &ROM [c << 11] - 0x8000;
-	    BlockIsROM [i] = BlockIsROM [i + 0x800] = TRUE;
-	}
-
-	for (i = c; i < c + 8; i++)
-	{
-	    int ppu = i & 15;
-	    
-	    MemorySpeed [i] = 
-		MemorySpeed [i + 0x800] = ppu >= 2 && ppu <= 3 ? ONE_CYCLE : SLOW_ONE_CYCLE;
-	}
-    }
-    
-    // Banks 40->7f and c0->ff
-    for (c = 0; c < 0x400; c += 16)
-    {
-	for (i = c; i < c + 16; i++)
-	{
-	    Map [i + 0x400] = Map [i + 0xc00] = &ROM [(c << 12) % CalculatedSize];
-	    MemorySpeed [i + 0x400] = MemorySpeed [i + 0xc00] = SLOW_ONE_CYCLE;
-	    BlockIsROM [i + 0x400] = BlockIsROM [i + 0xc00] = TRUE;
-	}
-    }
-
-    // Banks 7e->7f, RAM
-    for (c = 0; c < 16; c++)
-    {
-	Map [c + 0x7e0] = RAM;
-	Map [c + 0x7f0] = RAM + 0x10000;
-	BlockIsRAM [c + 0x7e0] = TRUE;
-	BlockIsRAM [c + 0x7f0] = TRUE;
-	BlockIsROM [c + 0x7e0] = FALSE;
-	BlockIsROM [c + 0x7f0] = FALSE;
-    }
-
-    // Banks 70->71, S-RAM
-    for (c = 0; c < 32; c++)
-    {
-	Map [c + 0x700] = ::SRAM + (((c >> 4) & 1) << 16);
-	BlockIsRAM [c + 0x700] = TRUE;
-	BlockIsROM [c + 0x700] = FALSE;
-    }
-
-    // Banks 00->3f and 80->bf address ranges 6000->7fff is RAM.
-    for (c = 0; c < 0x40; c++)
-    {
-	Map [0x006 + (c << 4)] = (uint8 *) ::SRAM - 0x6000;
-	Map [0x007 + (c << 4)] = (uint8 *) ::SRAM - 0x6000;
-	Map [0x806 + (c << 4)] = (uint8 *) ::SRAM - 0x6000;
-	Map [0x807 + (c << 4)] = (uint8 *) ::SRAM - 0x6000;
-	BlockIsRAM [0x006 + (c << 4)] = TRUE;
-	BlockIsRAM [0x007 + (c << 4)] = TRUE;
-	BlockIsRAM [0x806 + (c << 4)] = TRUE;
-	BlockIsRAM [0x807 + (c << 4)] = TRUE;
-    }
-    // Replicate the first 2Mb of the ROM at ROM + 2MB such that each 32K
-    // block is repeated twice in each 64K block.
-    for (c = 0; c < 64; c++)
-    {
-	memmove (&ROM [0x200000 + c * 0x10000], &ROM [c * 0x8000], 0x8000);
-	memmove (&ROM [0x208000 + c * 0x10000], &ROM [c * 0x8000], 0x8000);
-    }
-
     WriteProtectROM ();
 }
 

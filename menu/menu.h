@@ -23,7 +23,9 @@
 enum  MENU_ENUM
 {
 	MENU_RETURN = 0,
+#ifndef NO_ROM_BROWSER
 	MENU_ROM_SELECT,	
+#endif
 	MENU_STATE,
 	MENU_RESET_GAME,
 	MENU_SAVE_SRAM,
@@ -33,9 +35,9 @@ enum  MENU_ENUM
 	MENU_SOUND_RATE,
 	MENU_SOUND_STEREO,
 	MENU_FRAMESKIP,
-//	MENU_FULLSCREEN,
-	MENU_TRANSPARENCY,
+	MENU_FULLSCREEN,
 	MENU_FPS,
+	MENU_SOUND_SYNC,
 //	MENU_CPU_SPEED,
 	MENU_LOAD_GLOBAL_SETTINGS,
 	MENU_SAVE_GLOBAL_SETTINGS,
@@ -109,7 +111,10 @@ struct MENU_OPTIONS
   unsigned int optionsVersion;
   unsigned int frameSkip;
   unsigned int soundEnabled;
-  unsigned int transparency;
+  /* The following setting was 'transparency', which is now always enabled.
+   * This setting word cannot be reused for any other purpose. It is not
+   * guaranteed to be initialised to 0 in most installs of PocketSNES. */
+  unsigned int Unused_20140603_1;
   unsigned int volume;
   unsigned int pad_config[32];
   unsigned int country;
@@ -119,7 +124,7 @@ struct MENU_OPTIONS
   unsigned int autoSaveSram;
   unsigned int cpuSpeed;
   unsigned int soundRate;
-  unsigned int spare01;
+  unsigned int soundSync;
   unsigned int spare02;
   unsigned int spare03;
   unsigned int spare04;
@@ -159,6 +164,7 @@ void PrintTile();
 void PrintBar(u32 givenY);
 s32 MenuMessageBox(const char *message1, const char *message2,
 			const char *message3, enum MENU_MESSAGE_BOX_MODE mode);
+u32 IsPreviewingState();
 
 
 #endif /* _MENU_H_ */

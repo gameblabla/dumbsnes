@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-
+#include "rs97_dma.h"
 #define SAL_OK						1
 #define SAL_ERROR					0
 #define SAL_TRUE					1
@@ -47,25 +47,44 @@ s8 *sal_LastErrorGet();
 void sal_LastErrorSet(char *msg);
 s32 sal_StringCompare(const char *string1, const char *string2);
 
-u32 sal_VideoInit(u32 bpp, u32 color, u32 refreshRate);
+u32 sal_VideoInit(u32 bpp);
 u32 sal_VideoGetBpp();
 void sal_VideoClear(u32 color);
 void sal_VideoClearAll(u32 color);
 void sal_VideoDrawRect(s32 x, s32 y, s32 width, s32 height, u32 color);
+void sal_VideoBitmapDim(u16* img, u32 pixelCount);
 void sal_VideoPrint(s32 x, s32 y, const char *buffer, u32 color);
+u32 sal_VideoGetWidth();
+u32 sal_VideoGetHeight();
+void sal_VideoEnterGame(u32 fullscreenOption, u32 pal, u32 fps);
+/* Called by the main code when the height changes from 239 to 224, or from
+ * 224 to 239. */
+void sal_VideoSetPAL(u32 fullscreenOption, u32 pal);
+void sal_VideoExitGame();
+u32 sal_VideoGetPitch();
 void sal_VideoFlip(s32 vsync);
-void *sal_VideoGetBuffer();
-u32 sal_VideoSetScaling(s32 width, s32 height);
+#define sal_VideoGetBuffer() ((void*)dma_ptr)
+
+// void *sal_VideoGetBuffer();
 void sal_VideoPaletteSet(u32 index, u32 color);
 void sal_VideoPaletteSync();
 void sal_VideoBitmapScale(int startx, int starty, int viswidth, int visheight, int newwidth, int newheight,int pitch, u16 *src, u16 *dst);
 
 s32 sal_AudioInit(s32 rate, s32 bits, s32 stereo, s32 Hz);
+void sal_AudioPause(void);
+void sal_AudioResume(void);
 void sal_AudioClose(void);
-u32 sal_AudioGetCurrentBufferIndex();
-u32 sal_AudioGetPrevBufferIndex();
-u32 sal_AudioGetNextBufferIndex(u32 index);
-s16 *sal_AudioGetBuffer(u32 bufferIndex);
+void sal_AudioGenerate(u32 samples);
+u32 sal_AudioGetFramesBuffered();
+/* Suggested minimal number of frames of audio to be buffered.
+ * Below this, the automatic frameskipper may skip frames. */
+u32 sal_AudioGetMinFrames();
+/* Maximal number of frames of audio to be buffered, beyond which the
+ * emulation should be slowed down. */
+u32 sal_AudioGetMaxFrames();
+u32 sal_AudioGetSamplesPerFrame();
+u32 sal_AudioGetBytesPerSample();
+void sal_AudioSetMuted(u32 muted);
 
 void sal_AudioSetVolume(s32 l, s32 r);
 u32 sal_AudioRatePrevious(u32 currRate);
@@ -106,6 +125,8 @@ s32 sal_FileGetSize(const char *filename, u32 *filesize);
 u32 sal_FileGetCRC(u8 *data, u32 size);
 
 const char * sal_DirectoryGetHome(void);
+const char * sal_DirectoryGetUser(void);
+const char * sal_DirectoryGetTemp(void);
 void sal_DirectorySplitFilename(const char *wholeFilename, s8* path, s8 *filename, s8 *ext);
 void sal_DirectoryGetParent(s8 *path);
 s32 sal_DirectoryGetCurrent(s8 *path, u32 size);
@@ -121,5 +142,6 @@ s32 sal_DirectoryRead(struct SAL_DIR *d, struct SAL_DIRECTORY_ENTRY *dir);
 s32 sal_ImageLoad(const char *fname, void *dest, u32 width, u32 height);
 s32 sal_ImageDrawTiled(u16 *image, u32 width, u32 height, s32 xScroll, s32 yScroll, s32 x, s32 y);
 s32 sal_ImageDraw(u16 *image, u32 width, u32 height, s32 x, s32 y);
+s32 sal_HighlightBar(s32 width, s32 height, s32 x, s32 y);
 
 #endif /* __SAL_COMMON_H__ */

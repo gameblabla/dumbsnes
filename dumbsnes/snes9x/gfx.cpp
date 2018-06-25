@@ -46,7 +46,6 @@
 #include "display.h"
 #include "gfx.h"
 #include "apu.h"
-#include "cheats.h"
 
 
 #define M7 19
@@ -199,11 +198,6 @@ bool8_32 S9xGraphicsInit ()
 {
     register uint32 PixelOdd = 1;
     register uint32 PixelEven = 2;
-
-#ifdef GFX_MULTI_FORMAT
-    if (GFX.BuildPixel == NULL)
-	S9xSetRenderPixelFormat (RGB565);
-#endif
 
     for (uint8 bitshift = 0; bitshift < 4; bitshift++)
     {
@@ -3209,6 +3203,7 @@ static void S9xDisplayString (const char *string)
     }
 }
 
+
 void S9xUpdateScreen () // ~30-50ms! (called from FLUSH_REDRAW())
 {
     int32 x2 = 1;
@@ -3242,951 +3237,142 @@ void S9xUpdateScreen () // ~30-50ms! (called from FLUSH_REDRAW())
     uint32 starty = GFX.StartY;
     uint32 endy = GFX.EndY;
 
-#ifndef RC_OPTIMIZED
-    if (Settings.SupportHiRes &&
-	(PPU.BGMode == 5 || PPU.BGMode == 6 || IPPU.LatchedInterlace))
-    {
-	if (PPU.BGMode == 5 || PPU.BGMode == 6)
+	/* 
+		RS-97
+		This slowns down the SNES emu to no end
+		FIX THAT SHIT DAMNIT
+	*/
+	uint32 back = IPPU.ScreenColors [0] | (IPPU.ScreenColors [0] << 16);
+	if (PPU.ForcedBlanking)
 	{
-	    IPPU.RenderedScreenWidth = 512;
-	    x2 = 2;
+		//back = black;
+		memset(GFX.Screen, 0, (256*PPU.ScreenHeight)*2);
 	}
-	if (IPPU.LatchedInterlace)
-	{
-	    starty = GFX.StartY * 2;
-	    endy = GFX.EndY * 2 + 1;
-	}
-	if (!IPPU.DoubleWidthPixels)
-	{
-	    // The game has switched from lo-res to hi-res mode part way down
-	    // the screen. Scale any existing lo-res pixels on screen
-#ifndef _SNESPPC
-		if (Settings.SixteenBit)
-#endif
-	    {
-#if defined (USE_GLIDE) || defined (USE_OPENGL)
-                if (
-#ifdef USE_GLIDE
-                    (Settings.GlideEnable && GFX.Pitch == 512) ||
-#endif
-#ifdef USE_OPENGL
-                    (Settings.OpenGLEnable && GFX.Pitch == 512) ||
-#endif
-                    0)
-		{
-		    // Have to back out of the speed up hack where the low res.
-		    // SNES image was rendered into a 256x239 sized buffer,
-		    // ignoring the true, larger size of the buffer.
-		    
-		    for (register int32 y = (int32) GFX.StartY - 1; y >= 0; y--)
-		    {
-				register uint16 *p = (uint16 *) (GFX.Screen + y * GFX.Pitch) + 255;
-				register uint16 *q = (uint16 *) (GFX.Screen + y * GFX.RealPitch) + 510;
-				for (register int x = 255; x >= 0; x--, p--, q -= 2)
-					*q = *(q + 1) = *p;
-		    }
-		    GFX.Pitch = GFX.Pitch2 = GFX.RealPitch;
-                    GFX.PPL = GFX.Pitch >> 1;
-                    GFX.PPLx2 = GFX.Pitch;
-                    GFX.ZPitch = GFX.PPL;
-		}
-		else
-#endif
-		for (register uint32 y = 0; y < GFX.StartY; y++)
-		{
-		    register uint16 *p = (uint16 *) (GFX.Screen + y * GFX.Pitch) + 255;
-		    register uint16 *q = (uint16 *) (GFX.Screen + y * GFX.Pitch) + 510;
-		    for (register int x = 255; x >= 0; x--, p--, q -= 2)
-			*q = *(q + 1) = *p;
-		}
-	    }
-#ifndef _SNESPPC
-	    else
-	    {
-			for (register uint32 y = 0; y < GFX.StartY; y++)
-			{
-				register uint8 *p = GFX.Screen + y * GFX.Pitch + 255;
-				register uint8 *q = GFX.Screen + y * GFX.Pitch + 510;
-				for (register int x = 255; x >= 0; x--, p--, q -= 2)
-				*q = *(q + 1) = *p;
-			}
-	    }
-#endif
-	    IPPU.DoubleWidthPixels = TRUE;
-	}
-    }
-#endif //RC_OPTIMIZED (DONT DO ABOVE)
-
-
-
-    uint32 black = BLACK | (BLACK << 16);
-
-    if (Settings.Transparency && Settings.SixteenBit)
-    {
-		if (GFX.Pseudo)
-		{
-			GFX.r2131 = 0x5f;
-			GFX.r212d = (Memory.FillRAM [0x212c] ^
-				 Memory.FillRAM [0x212d]) & 15;
-			GFX.r212c &= ~GFX.r212d;
-			GFX.r2130 |= 2;
-		}
-
-		if (!PPU.ForcedBlanking && ADD_OR_SUB_ON_ANYTHING &&
-			(GFX.r2130 & 0x30) != 0x30 &&
-			!((GFX.r2130 & 0x30) == 0x10 && IPPU.Clip[1].Count[5] == 0))
-		{
-			struct ClipData *pClip;
-
-			GFX.FixedColour = BUILD_PIXEL (IPPU.XB [PPU.FixedColourRed],
-					   IPPU.XB [PPU.FixedColourGreen],
-					   IPPU.XB [PPU.FixedColourBlue]);
-
-	    // Clear the z-buffer, marking areas 'covered' by the fixed
-	    // colour as depth 1.
-	    pClip = &IPPU.Clip [1];
-
-	    // Clear the z-buffer
-	    if (pClip->Count [5])
-	    {
-
-			// Colour window enabled.
-
-#ifdef RC_OPTIMIZED
-			for (uint32 y = starty; y <= endy; y++)
-			{
-				ZeroMemory (GFX.SubZBuffer + y * GFX.ZPitch,
-					IPPU.RenderedScreenWidth);
-				ZeroMemory (GFX.ZBuffer + y * GFX.ZPitch,
-					IPPU.RenderedScreenWidth);
-
-				if (IPPU.Clip [0].Count [5])
-				{
-					memset ((GFX.SubScreen + y * GFX.Pitch2), black, IPPU.RenderedScreenWidth);
-				}
-				for (uint32 c = 0; c < pClip->Count [5]; c++)
-				{
-					if (pClip->Right [c][5] > pClip->Left [c][5])
-					{
-						memset (GFX.SubZBuffer + y * GFX.ZPitch + pClip->Left [c][5] * x2,
-							1, (pClip->Right [c][5] - pClip->Left [c][5]) * x2);
-						if (IPPU.Clip [0].Count [5])
-						{
-						// Blast, have to clear the sub-screen to the fixed-colour
-						// because there is a colour window in effect clipping
-						// the main screen that will allow the sub-screen
-						// 'underneath' to show through.
-						memset ((GFX.SubScreen + y * GFX.Pitch2) + pClip->Left [c][5] * x2,
-								 GFX.FixedColour,
-								 pClip->Right[c][5]*x2 - pClip->Left [c][5] * x2);
-						}
-					}
-				}
-			}
-
-#else // NOT RC_OPTIMIZED
-
-			for (uint32 y = starty; y <= endy; y++)
-			{
-
-				ZeroMemory (GFX.SubZBuffer + y * GFX.ZPitch,
-					IPPU.RenderedScreenWidth);
-				ZeroMemory (GFX.ZBuffer + y * GFX.ZPitch,
-					IPPU.RenderedScreenWidth);
-
-				if (IPPU.Clip [0].Count [5])
-				{
-							uint32 *p = (uint32 *) (GFX.SubScreen + y * GFX.Pitch2);
-							uint32 *q = (uint32 *) ((uint16 *) p + IPPU.RenderedScreenWidth);
-							while (p < q)
-								*p++ = black;
-				}
-
-				
-				for (uint32 c = 0; c < pClip->Count [5]; c++)
-				{
-					if (pClip->Right [c][5] > pClip->Left [c][5])
-					{
-						memset (GFX.SubZBuffer + y * GFX.ZPitch + pClip->Left [c][5] * x2,
-							1, (pClip->Right [c][5] - pClip->Left [c][5]) * x2);
-						if (IPPU.Clip [0].Count [5])
-						{
-						// Blast, have to clear the sub-screen to the fixed-colour
-						// because there is a colour window in effect clipping
-						// the main screen that will allow the sub-screen
-						// 'underneath' to show through.
-
-						uint16 *p = (uint16 *) (GFX.SubScreen + y * GFX.Pitch2);
-						uint16 *q = p + pClip->Right [c][5] * x2;
-						p += pClip->Left [c][5] * x2;
-
-						while (p < q)
-							*p++ = (uint16) GFX.FixedColour;
-						}
-					}
-				}
-			}
-#endif
-#undef RC_OPTIMIZED
-
-	    }
-	    else
-	    {
-
-#ifdef RC_OPTIMIZED
-
-		if (GFX.ZPitch == (uint32)IPPU.RenderedScreenWidth)
-		{
-
-			memset (GFX.ZBuffer + starty * GFX.ZPitch, 0, GFX.ZPitch * (endy - starty - 1));
-			memset (GFX.SubZBuffer + starty * GFX.ZPitch, 1, GFX.ZPitch * (endy - starty - 1));
-		}
-		else
-		{
-			for (uint32 y = starty; y <= endy; y++)
-			{
-				ZeroMemory (GFX.ZBuffer + y * GFX.ZPitch,
-					IPPU.RenderedScreenWidth);
-				memset (GFX.SubZBuffer + y * GFX.ZPitch, 1,
-					IPPU.RenderedScreenWidth);
-			}
-		}
-		
-	    if (IPPU.Clip [0].Count [5])
-	    {
-			// Blast, have to clear the sub-screen to the fixed-colour
-			// because there is a colour window in effect clipping
-			// the main screen that will allow the sub-screen
-			// 'underneath' to show through.
-			if (GFX.Pitch2 == (uint32)IPPU.RenderedScreenWidth)
-			{
-				memset ((GFX.SubScreen + starty * GFX.Pitch2), 
-						GFX.FixedColour | (GFX.FixedColour << 16),
-						GFX.Pitch2 * (endy - starty - 1));
-			}
-			else
-			{
-				for (uint32 y = starty; y <= endy; y++)
-				{
-					memset ((GFX.SubScreen + y * GFX.Pitch2), 
-							GFX.FixedColour | (GFX.FixedColour << 16),
-							IPPU.RenderedScreenWidth);
-				}
-			}
-		}
-
-#else // NOT RC_OPTIMIZED
-		for (uint32 y = starty; y <= endy; y++)
-		{
-			ZeroMemory (GFX.ZBuffer + y * GFX.ZPitch,
-				IPPU.RenderedScreenWidth);
-		    memset (GFX.SubZBuffer + y * GFX.ZPitch, 1,
-			    IPPU.RenderedScreenWidth);
-		    if (IPPU.Clip [0].Count [5])
-		    {
-			// Blast, have to clear the sub-screen to the fixed-colour
-			// because there is a colour window in effect clipping
-			// the main screen that will allow the sub-screen
-			// 'underneath' to show through.
-
-			uint32 b = GFX.FixedColour | (GFX.FixedColour << 16);
-			uint32 *p = (uint32 *) (GFX.SubScreen + y * GFX.Pitch2);
-			uint32 *q = (uint32 *) ((uint16 *) p + IPPU.RenderedScreenWidth);
-
-			while (p < q)
-			    *p++ = b;
-		    }
-		}
-#endif
-
-		}
-
-	    if (ANYTHING_ON_SUB)
-	    {
-			GFX.DB = GFX.SubZBuffer;
-			RenderScreen (GFX.SubScreen, TRUE, TRUE, SUB_SCREEN_DEPTH);
-	    }
-
-	    if (IPPU.Clip [0].Count [5])
-	    {
-		if (strncmp (Memory.ROMId, "AQT", 3) != 0)
-		{
-		    // Have to copy the sub-screen to the main screen as there is
-		    // a colour window in effect clipping the main screen allowing
-		    // the sub-screen to show through.
-
-		    if (IPPU.Clip [1].Count [5])
-		    {
-			for (uint32 y = starty; y <= endy; y++)
-			{
-			    for (uint32 w = 0; w < IPPU.Clip [1].Count [5]; w++)
-			    {
-				if (IPPU.Clip [1].Right [w][5] >= IPPU.Clip [1].Left [w][5])
-				{
-				    int offset = IPPU.Clip [1].Left [w][5] * x2 * sizeof (uint16);
-				    int width = (IPPU.Clip [1].Right [w][5] - 
-						 IPPU.Clip [1].Left [w][5]) * x2 * sizeof (uint16);
-				    memmove (GFX.Screen + y * GFX.Pitch2 + offset,
-					     GFX.SubScreen + y * GFX.Pitch2 + offset,
-					     width);
-				}
-			    }
-			}
-		    }
-		    else
-		    {
-			for (uint32 y = starty; y <= endy; y++)
-			    memmove (GFX.Screen + y * GFX.Pitch2,
-				     GFX.SubScreen + y * GFX.Pitch2,
-				     IPPU.RenderedScreenWidth * sizeof (uint16));
-		    }
-		}
-		else
-		{
-#ifdef RC_OPTIMIZED
-		    // Clear the areas 'outside' the colour window to black
-		    // For now just clear all of the scanlines
-
-			if (GFX.Pitch2 == (uint32)IPPU.RenderedScreenWidth)
-			{
-				memset ((GFX.Screen + starty * GFX.Pitch2), black, GFX.Pitch2 * (endy - starty - 1));
-			}
-			else
-			{
-			    for (uint32 y = starty; y <= endy; y++)
-				{
-					memset ((GFX.Screen + y * GFX.Pitch2), black, IPPU.RenderedScreenWidth);
-				}
-			}
-#else
-		    // Clear the areas 'outside' the colour window to black
-		    // For now just clear all of the scanlines
-		    for (uint32 y = starty; y <= endy; y++)
-                    {
-                        uint32 *p = (uint32 *) (GFX.Screen + y * GFX.Pitch2);
-                        uint32 *q = (uint32 *) ((uint16 *) p + IPPU.RenderedScreenWidth);
-
-                        while (p < q)
-                            *p++ = black;
-                    }		    
-#endif
-		}
-	    }
-
-	    GFX.DB = GFX.ZBuffer;
-	    RenderScreen (GFX.Screen, FALSE, FALSE, MAIN_SCREEN_DEPTH);
-	    if (SUB_OR_ADD(5))
-	    {
-		uint32 back = IPPU.ScreenColors [0];
-		uint32 Left = 0;
-		uint32 Right = 256;
-		uint32 Count;
-
-		pClip = &IPPU.Clip [0];
-
-		for (uint32 y = starty; y <= endy; y++)
-		{
-		    if (!(Count = pClip->Count [5]))
-		    {
-			Left = 0;
-			Right = 256 * x2;
-			Count = 1;
-		    }
-
-		    for (uint32 b = 0; b < Count; b++)
-		    {
-			if (pClip->Count [5])
-			{
-			    Left = pClip->Left [b][5] * x2;
-			    Right = pClip->Right [b][5] * x2;
-			    if (Right <= Left)
-				continue;
-			}
-
-			if (GFX.r2131 & 0x80)
-			{
-			    if (GFX.r2131 & 0x40)
-			    {
-				// Subtract, halving the result.
-				register uint16 *p = (uint16 *) (GFX.Screen + y * GFX.Pitch2) + Left;
-				register uint8 *d = GFX.ZBuffer + y * GFX.ZPitch;
-				register uint8 *s = GFX.SubZBuffer + y * GFX.ZPitch + Left;
-				register uint8 *e = d + Right;
-				uint16 back_fixed = COLOR_SUB (back, GFX.FixedColour);
-
-				d += Left;
-				while (d < e)
-				{
-				    if (*d == 0)
-				    {
-					if (*s)
-					{
-					    if (*s != 1)
-						*p = COLOR_SUB1_2 (back, *(p + GFX.Delta));
-					    else
-						*p = back_fixed;
-					}
-					else
-					    *p = (uint16) back;
-				    }
-				    d++;
-				    p++;
-				    s++;
-				}
-			    }
-			    else
-			    {
-				// Subtract
-				register uint16 *p = (uint16 *) (GFX.Screen + y * GFX.Pitch2) + Left;
-				register uint8 *s = GFX.SubZBuffer + y * GFX.ZPitch + Left;
-				register uint8 *d = GFX.ZBuffer + y * GFX.ZPitch;
-				register uint8 *e = d + Right;
-				uint16 back_fixed = COLOR_SUB (back, GFX.FixedColour);
-
-				d += Left;
-				while (d < e)
-				{
-				    if (*d == 0)
-				    {
-					if (*s)
-					{
-					    if (*s != 1)
-						*p = COLOR_SUB (back, *(p + GFX.Delta));
-					    else
-						*p = back_fixed;
-					}
-					else
-					    *p = (uint16) back;
-				    }
-				    d++;
-				    p++;
-				    s++;
-				}
-			    }
-			}
-			else
-			if (GFX.r2131 & 0x40)
-			{
-			    register uint16 *p = (uint16 *) (GFX.Screen + y * GFX.Pitch2) + Left;
-			    register uint8 *d = GFX.ZBuffer + y * GFX.ZPitch;
-			    register uint8 *s = GFX.SubZBuffer + y * GFX.ZPitch + Left;
-			    register uint8 *e = d + Right;
-			    uint16 back_fixed = COLOR_ADD (back, GFX.FixedColour);
-			    d += Left;
-			    while (d < e)
-			    {
-				if (*d == 0)
-				{
-				    if (*s)
-				    {
-					if (*s != 1)
-					    *p = COLOR_ADD1_2 (back, *(p + GFX.Delta));
-					else
-					    *p = back_fixed;
-				    }
-				    else
-					*p = (uint16) back;
-				}
-				d++;
-				p++;
-				s++;
-			    }
-			}
-			else
-			if (back != 0)
-			{
-			    register uint16 *p = (uint16 *) (GFX.Screen + y * GFX.Pitch2) + Left;
-			    register uint8 *d = GFX.ZBuffer + y * GFX.ZPitch;
-			    register uint8 *s = GFX.SubZBuffer + y * GFX.ZPitch + Left;
-			    register uint8 *e = d + Right;
-			    uint16 back_fixed = COLOR_ADD (back, GFX.FixedColour);
-			    d += Left;
-			    while (d < e)
-			    {
-				if (*d == 0)
-				{
-				    if (*s)
-				    {
-					if (*s != 1)
-					    *p = COLOR_ADD (back, *(p + GFX.Delta));
-					else	
-					    *p = back_fixed;
-				    }
-				    else
-					*p = (uint16) back;
-				}
-				d++;
-				p++;
-				s++;
-			    }
-			}
-			else
-			{
-			    if (!pClip->Count [5])
-			    {
-				// The backdrop has not been cleared yet - so
-				// copy the sub-screen to the main screen
-				// or fill it with the back-drop colour if the
-				// sub-screen is clear.
-				register uint16 *p = (uint16 *) (GFX.Screen + y * GFX.Pitch2) + Left;
-				register uint8 *d = GFX.ZBuffer + y * GFX.ZPitch;
-				register uint8 *s = GFX.SubZBuffer + y * GFX.ZPitch + Left;
-				register uint8 *e = d + Right;
-				d += Left;
-				while (d < e)
-				{
-				    if (*d == 0)
-				    {
-						if (*s)
-						{
-							if (*s != 1)
-								*p = *(p + GFX.Delta);
-							else	
-								*p = GFX.FixedColour;
-						}
-						else
-							*p = (uint16) back;
-				    }
-				    d++;
-				    p++;
-				    s++;
-				}
-			   }
-			}
-		    }
-		}
-
-	    }
-	    else
-	    {
-			// Subscreen not being added to back
-			uint32 back = IPPU.ScreenColors [0] | (IPPU.ScreenColors [0] << 16);
-			pClip = &IPPU.Clip [0];
-
-			if (pClip->Count [5])
-			{
-				for (uint32 y = starty; y <= endy; y++)
-				{
-					for (uint32 b = 0; b < pClip->Count [5]; b++)
-					{
-						uint32 Left = pClip->Left [b][5] * x2;
-						uint32 Right = pClip->Right [b][5] * x2;
-						uint16 *p = (uint16 *) (GFX.Screen + y * GFX.Pitch2) + Left;
-						uint8 *d = GFX.ZBuffer + y * GFX.ZPitch;
-						uint8 *e = d + Right;
-						d += Left;
-
-						while (d < e)
-						{
-							if (*d++ == 0)
-								*p = (int16) back;
-							p++;
-						}
-					}
-				}
-			}
-			else
-			{
-				for (uint32 y = starty; y <= endy; y++)
-				{
-					uint16 *p = (uint16 *) (GFX.Screen + y * GFX.Pitch2);
-					uint8 *d = GFX.ZBuffer + y * GFX.ZPitch;
-					uint8 *e = d + 256 * x2;
-
-					while (d < e)
-					{
-						if (*d == 0)
-#ifdef RC_OPTIMIZED
-							*p++ = back;
-						d++;
-#else
-						*p = (int16) back;
-						d++;
-						p++;
-#endif
-					}
-				}
-			}
-	    }
-	}	
 	else
 	{
-	    // 16bit and transparency but currently no transparency effects in
-	    // operation.
-
-	    uint32 back = IPPU.ScreenColors [0] | 
-			 (IPPU.ScreenColors [0] << 16);
-
-	    if (PPU.ForcedBlanking)
-			back = black;
-	    if (IPPU.Clip [0].Count[5])
-	    {
-
-#ifdef RC_OPTIMIZED
-			if (GFX.Pitch2 == (uint32)IPPU.RenderedScreenWidth)
-			{
-				memset (GFX.Screen + starty * GFX.Pitch2, black,
-						GFX.Pitch2 * (endy - starty - 1));
-			}
-			else
-			{
-				for (uint32 y = starty; y <= endy; y++)
-				{
-					memset (GFX.Screen + y * GFX.Pitch2, black,
-							GFX.Pitch2);
-				}
-			}
-			for (uint32 y = starty; y <= endy; y++)
-			{
-				for (uint32 c = 0; c < IPPU.Clip [0].Count [5]; c++)
-				{
-					if (IPPU.Clip [0].Right [c][5] > IPPU.Clip [0].Left [c][5])
-					{
-
-						memset ((GFX.Screen + y * GFX.Pitch2) + IPPU.Clip [0].Left [c][5] * x2,
-								back,
-								IPPU.Clip [0].Right [c][5] * x2 - IPPU.Clip [0].Left [c][5] * x2);
-					}
-				}
-			}
-#else
-			for (uint32 y = starty; y <= endy; y++)
-			{
-				uint32 *p = (uint32 *) (GFX.Screen + y * GFX.Pitch2);
-				uint32 *q = (uint32 *) ((uint16 *) p + IPPU.RenderedScreenWidth);
-
-				while (p < q)
-					*p++ = black;
-
-				for (uint32 c = 0; c < IPPU.Clip [0].Count [5]; c++)
-				{
-					if (IPPU.Clip [0].Right [c][5] > IPPU.Clip [0].Left [c][5])
-					{
-						uint16 *p = (uint16 *) (GFX.Screen + y * GFX.Pitch2);
-						uint16 *q = p + IPPU.Clip [0].Right [c][5] * x2;
-						p += IPPU.Clip [0].Left [c][5] * x2;
-
-						while (p < q)
-						*p++ = (uint16) back;
-					}
-				}
-			}
-#endif
-	    }
-	    else
-	    {
-#ifdef RC_OPTIMIZED
-			if (GFX.Pitch2 == (uint32)IPPU.RenderedScreenWidth)
-			{
-				memset (GFX.Screen + starty * GFX.Pitch2, back,
-						GFX.Pitch2 * (endy - starty - 1));
-			}
-			else
-			{
-				for (uint32 y = starty; y <= endy; y++)
-				{
-					memset (GFX.Screen + y * GFX.Pitch2, back,
-							GFX.Pitch2);
-				}
-			}
-#else
-			for (uint32 y = starty; y <= endy; y++)
-			{
-				uint32 *p = (uint32 *) (GFX.Screen + y * GFX.Pitch2);
-				uint32 *q = (uint32 *) ((uint16 *) p + IPPU.RenderedScreenWidth);
-				while (p < q)
-				*p++ = back;
-			}
-#endif
-	    }
-	    if (!PPU.ForcedBlanking)
-	    {
-#ifdef RC_OPTIMIZED
-			if (GFX.ZPitch == (uint32)IPPU.RenderedScreenWidth)
-			{
-				memset (GFX.ZBuffer + starty * GFX.ZPitch, 0,
-						GFX.ZPitch * (endy - starty - 1));
-			}
-			else
-			{
-				for (uint32 y = starty; y <= endy; y++)
-				{
-					memset (GFX.ZBuffer + y * GFX.ZPitch, 0,
-							GFX.ZPitch);
-				}
-			}
-#else
-			for (uint32 y = starty; y <= endy; y++)
-			{
-				ZeroMemory (GFX.ZBuffer + y * GFX.ZPitch,
-					IPPU.RenderedScreenWidth);
-			}
-#endif
-			GFX.DB = GFX.ZBuffer;
-			RenderScreen (GFX.Screen, FALSE, TRUE, SUB_SCREEN_DEPTH);
-	    }
-	}
-    }
-    else
-    {
-#ifndef _SNESPPC
-	if (Settings.SixteenBit)
-#endif
-	{
-	    uint32 back = IPPU.ScreenColors [0] | (IPPU.ScreenColors [0] << 16);
-	    if (PPU.ForcedBlanking)
-		back = black;
-	    else
+		SelectTileRenderer (TRUE);
+		for (uint32 y = starty; y <= endy; y++)
 		{
-			SelectTileRenderer (TRUE);
-		}
-	    for (uint32 y = starty; y <= endy; y++)
-	    {
 			uint32 *p = (uint32 *) (GFX.Screen + y * GFX.Pitch2);
 			uint32 *q = (uint32 *) ((uint16 *) p + IPPU.RenderedScreenWidth);
 			while (p < q)
 				*p++ = back;
-	    }
-	}
-#ifndef _SNESPPC
-	else
-	{
-	    for (uint32 y = starty; y <= endy; y++)
-	    {
-		ZeroMemory (GFX.Screen + y * GFX.Pitch2,
-			    IPPU.RenderedScreenWidth);
-	    }
-	}
-#endif
-	if (!PPU.ForcedBlanking)
-	{
-	    for (uint32 y = starty; y <= endy; y++)
-	    {
-		ZeroMemory (GFX.ZBuffer + y * GFX.ZPitch,
-			    IPPU.RenderedScreenWidth);
-	    }
-	    GFX.DB = GFX.ZBuffer;
-	    GFX.pCurrentClip = &IPPU.Clip [0];
+		}
+	
+		for (uint32 y = starty; y <= endy; y++)
+		{
+			ZeroMemory (GFX.ZBuffer + y * GFX.ZPitch, IPPU.RenderedScreenWidth);
+		}
+		GFX.DB = GFX.ZBuffer;
+		GFX.pCurrentClip = &IPPU.Clip [0];
 
-#define FIXCLIP(n)\
-if (GFX.r212c & (1 << (n))) \
-    GFX.pCurrentClip = &IPPU.Clip [0]; \
-else \
-    GFX.pCurrentClip = &IPPU.Clip [1]
+		#define FIXCLIP(n)\
+		if (GFX.r212c & (1 << (n))) \
+			GFX.pCurrentClip = &IPPU.Clip [0]; \
+		else \
+			GFX.pCurrentClip = &IPPU.Clip [1]
 
 
-#define DISPLAY(n)\
-    (!(PPU.BG_Forced & n) && \
-      (GFX.r212c & n) || \
-     ((GFX.r212d & n) && subadd))
+		#define DISPLAY(n)\
+			(!(PPU.BG_Forced & n) && \
+			  (GFX.r212c & n) || \
+			 ((GFX.r212d & n) && subadd))
 
-	    uint8 subadd = GFX.r2131 & 0x3f;
+		uint8 subadd = GFX.r2131 & 0x3f;
+		bool8_32 BG0 = DISPLAY(1);
+		bool8_32 BG1 = DISPLAY(2);
+		bool8_32 BG2 = DISPLAY(4);
+		bool8_32 BG3 = DISPLAY(8);
+		bool8_32 OB  = DISPLAY(16);
 
-	    bool8_32 BG0 = DISPLAY(1);
-	    bool8_32 BG1 = DISPLAY(2);
-	    bool8_32 BG2 = DISPLAY(4);
-	    bool8_32 BG3 = DISPLAY(8);
-	    bool8_32 OB  = DISPLAY(16);
-
-	    if (PPU.BGMode <= 1)
-	    {
-		if (OB)
-		{
-		    FIXCLIP(4);
-		    DrawOBJS ();
-		}
-		if (BG0)
-		{
-		    FIXCLIP(0);
-		    DrawBackground (PPU.BGMode, 0, 10, 14);
-		}
-		if (BG1)
-		{
-		    FIXCLIP(1);
-		    DrawBackground (PPU.BGMode, 1, 9, 13);
-		}
-		if (BG2)
-		{
-		    FIXCLIP(2);
-		    DrawBackground (PPU.BGMode, 2, 3,
-				    (Memory.FillRAM [0x2105] & 8) == 0 ? 6 : 17);
-		}
-		if (BG3 && PPU.BGMode == 0)
-		{
-		    FIXCLIP(3);
-		    DrawBackground (PPU.BGMode, 3, 2, 5);
-		}
-	    }
-	    else if (PPU.BGMode != 7)
-	    {
-		if (OB)
-		{
-		    FIXCLIP(4);
-		    DrawOBJS ();
-		}
-		if (BG0)
-		{
-		    FIXCLIP(0);
-		    DrawBackground (PPU.BGMode, 0, 5, 13);
-		}
-		if (BG1 && PPU.BGMode != 6)
-		{
-		    FIXCLIP(1);
-		    DrawBackground (PPU.BGMode, 1, 2, 9);
-		}
-	    }
-	    else
-	    {
-		if (OB)
-		{
-		    FIXCLIP(4);
-		    DrawOBJS ();
-		}
-		if (BG0 || ((Memory.FillRAM [0x2133] & 0x40) && BG1))
-		{
-		    int bg;
-		    FIXCLIP(0);
-		    if (Memory.FillRAM [0x2133] & 0x40)
-		    {
-			GFX.Mode7Mask = 0x7f;
-			GFX.Mode7PriorityMask = 0x80;
-			Mode7Depths [0] = 5;
-			Mode7Depths [1] = 9;
-			bg = 1;
-		    }
-		    else
-		    {
-			GFX.Mode7Mask = 0xff;
-			GFX.Mode7PriorityMask = 0;
-			Mode7Depths [0] = 5;
-			Mode7Depths [1] = 5;
-			bg = 0;
-		    }
-
-#ifndef _SNESPPC
-		    if (!Settings.SixteenBit)
-			DrawBGMode7Background (GFX.Screen, bg);
-		    else
-#endif
-		    {
-			if (!Settings.Mode7Interpolate)
-			{	
-			    DrawBGMode7Background16 (GFX.Screen, bg);
+			if (PPU.BGMode <= 1)
+			{
+				if (OB)
+				{
+					FIXCLIP(4);
+					DrawOBJS ();
+				}
+				if (BG0)
+				{
+					FIXCLIP(0);
+					DrawBackground (PPU.BGMode, 0, 10, 14);
+				}
+				if (BG1)
+				{
+					FIXCLIP(1);
+					DrawBackground (PPU.BGMode, 1, 9, 13);
+				}
+				if (BG2)
+				{
+					FIXCLIP(2);
+					DrawBackground (PPU.BGMode, 2, 3,
+							(Memory.FillRAM [0x2105] & 8) == 0 ? 6 : 17);
+				}
+				if (BG3 && PPU.BGMode == 0)
+				{
+					FIXCLIP(3);
+					DrawBackground (PPU.BGMode, 3, 2, 5);
+				}
+			}
+			else if (PPU.BGMode != 7)
+			{
+				if (OB)
+				{
+					FIXCLIP(4);
+					DrawOBJS ();
+				}
+				if (BG0)
+				{
+					FIXCLIP(0);
+					DrawBackground (PPU.BGMode, 0, 5, 13);
+				}
+				if (BG1 && PPU.BGMode != 6)
+				{
+					FIXCLIP(1);
+					DrawBackground (PPU.BGMode, 1, 2, 9);
+				}
 			}
 			else
-			{	
-			    DrawBGMode7Background16_i (GFX.Screen, bg);
+			{
+				if (OB)
+				{
+					FIXCLIP(4);
+					DrawOBJS ();
+				}
+				
+				if (BG0 || ((Memory.FillRAM [0x2133] & 0x40) && BG1))
+				{
+					int bg;
+					FIXCLIP(0);
+					if (Memory.FillRAM [0x2133] & 0x40)
+					{
+						GFX.Mode7Mask = 0x7f;
+						GFX.Mode7PriorityMask = 0x80;
+						Mode7Depths [0] = 5;
+						Mode7Depths [1] = 9;
+						bg = 1;
+					}
+					else
+					{
+						GFX.Mode7Mask = 0xff;
+						GFX.Mode7PriorityMask = 0;
+						Mode7Depths [0] = 5;
+						Mode7Depths [1] = 5;
+						bg = 0;
+					}
+					
+					if (!Settings.Mode7Interpolate)
+					{	
+						DrawBGMode7Background16 (GFX.Screen, bg);
+					}
+					else
+					{	
+						DrawBGMode7Background16_i (GFX.Screen, bg);
+					}
+
+				}
 			}
-		  }
-		}
-	    }
-	}
-    }
-#ifndef RC_OPTIMIZE // no hi res
-    if (Settings.SupportHiRes && PPU.BGMode != 5 && PPU.BGMode != 6)
-    {
-	if (IPPU.DoubleWidthPixels)
-	{
-	    // Mixure of background modes used on screen - scale width
-	    // of all non-mode 5 and 6 pixels.
-#ifndef _SNESPPC
-		if (Settings.SixteenBit)
-#endif
-	    {
-		for (register uint32 y = GFX.StartY; y <= GFX.EndY; y++)
-		{
-		    register uint16 *p = (uint16 *) (GFX.Screen + y * GFX.Pitch) + 255;
-		    register uint16 *q = (uint16 *) (GFX.Screen + y * GFX.Pitch) + 510;
-		    for (register int x = 255; x >= 0; x--, p--, q -= 2)
-			*q = *(q + 1) = *p;
-		}
-	    }
-#ifndef _SNESPPC
-	    else
-	    {
-		for (register uint32 y = GFX.StartY; y <= GFX.EndY; y++)
-		{
-		    register uint8 *p = GFX.Screen + y * GFX.Pitch + 255;
-		    register uint8 *q = GFX.Screen + y * GFX.Pitch + 510;
-		    for (register int x = 255; x >= 0; x--, p--, q -= 2)
-			*q = *(q + 1) = *p;
-		}
-	    }
-#endif
 	}
 
-	if (IPPU.LatchedInterlace)
-	{
-	    // Interlace is enabled - double the height of all non-mode 5 and 6
-	    // pixels.
-	    for (uint32 y = GFX.StartY; y <= GFX.EndY; y++)
-	    {
-		memmove (GFX.Screen + (y * 2 + 1) * GFX.Pitch2,
-			 GFX.Screen + y * 2 * GFX.Pitch2,
-			 GFX.Pitch2);
-	    }
-	}
-    }
-#endif
     IPPU.PreviousLine = IPPU.CurrentLine;
 }
-
-#ifdef GFX_MULTI_FORMAT
-
-#define _BUILD_PIXEL(F) \
-uint32 BuildPixel##F(uint32 R, uint32 G, uint32 B) \
-{ \
-    return (BUILD_PIXEL_##F(R,G,B)); \
-}\
-uint32 BuildPixel2##F(uint32 R, uint32 G, uint32 B) \
-{ \
-    return (BUILD_PIXEL2_##F(R,G,B)); \
-} \
-void DecomposePixel##F(uint32 pixel, uint32 &R, uint32 &G, uint32 &B) \
-{ \
-    DECOMPOSE_PIXEL_##F(pixel,R,G,B); \
-}
-
-_BUILD_PIXEL(RGB565)
-_BUILD_PIXEL(RGB555)
-_BUILD_PIXEL(BGR565)
-_BUILD_PIXEL(BGR555)
-_BUILD_PIXEL(GBR565)
-_BUILD_PIXEL(GBR555)
-_BUILD_PIXEL(RGB5551)
-
-bool8_32 S9xSetRenderPixelFormat (int format)
-{
-    extern uint32 current_graphic_format;
-
-    current_graphic_format = format;
-
-    switch (format)
-    {
-    case RGB565:
-	_BUILD_SETUP(RGB565)
-	return (TRUE);
-    case RGB555:
-	_BUILD_SETUP(RGB555)
-	return (TRUE);
-    case BGR565:
-	_BUILD_SETUP(BGR565)
-	return (TRUE);
-    case BGR555:
-	_BUILD_SETUP(BGR555)
-	return (TRUE);
-    case GBR565:
-	_BUILD_SETUP(GBR565)
-	return (TRUE);
-    case GBR555:
-	_BUILD_SETUP(GBR555)
-	return (TRUE);
-    case RGB5551:
-        _BUILD_SETUP(RGB5551)
-        return (TRUE);
-    default:
-	break;
-    }
-    return (FALSE);
-}
-#endif

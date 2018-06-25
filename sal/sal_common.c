@@ -15,7 +15,6 @@ which is a pain in the ass especially as I'm always changing things
 #include <zip.h>
 
 #include "sal_common.h"
-
 #define SAL_FRAME_BUFFER_COUNT	4
 
 u32 mInputRepeat=0;
@@ -31,7 +30,7 @@ static u32 mFont8x8[]= {
 0x3c0606,0x667c6060,0x7c6666,0x663c0000,0x3c067e,0xc3e0c38,0xc0c0c,0x667c0000,0x3e607c66,0x663e0606,0x666666,0x181c0018,0x3c1818,0x18180018,0xe181818,0x36660606,0x66361e,0x1818181c,0x3c1818,0x7f370000,0x63636b,0x663e0000,0x666666,0x663c0000,0x3c6666,0x663e0000,0x63e6666,0x667c0000,0x607c6666,0x663e0000,0x60606,0x67c0000,0x3e603c,0x187e1800,0x701818,0x66660000,0x7c6666,0x66660000,0x183c66,0x63630000,0x363e6b,0x3c660000,0x663c18,0x66660000,0x3e607c66,0x307e0000,0x7e0c18,0xc181870,0x701818,0x18181818,0x18181818,0x3018180e,0xe1818,0x794f0600,0x30};
 
 static s32 mAudioRateLookup[] = {
-	11025, 22050, 44100, 48000,
+	11025, 22050, 32000, 44100, 48000,
 };
 
 static s8 mLastError[256]={0};
@@ -61,13 +60,14 @@ void sal_VideoBitmapScale(int startx, int starty, int viswidth, int visheight, i
 
   do
   {
-    u16 *buffer_mem=&src[(y>>16)*320];
+    u16 *buffer_mem=&src[(y>>16)*viswidth];
     W=newwidth; x=startx<<16;
     do {
       *dst++=buffer_mem[x>>16];
       x+=ix;
     } while (--W);
-    dst+=pitch;
+	//RS-97 fix
+    dst+=pitch + sal_VideoGetPitch()/4;
     y+=iy;
   } while (--H);
 }
@@ -77,19 +77,15 @@ static void sal_VideoDrawRect8(s32 x, s32 y, s32 width, s32 height, u8 color)
 	u8 *pixy = (u8*)sal_VideoGetBuffer();
 	u8 *pixx;
 	s32 h,w;
-#if SAL_SCREEN_ROTATED == 1
-	pixy+=((SAL_SCREEN_HEIGHT-1)*SAL_SCREEN_Y_STRIDE_UP);
-#endif
-	pixy+=(y*SAL_SCREEN_Y_STRIDE_DOWN)+(x*SAL_SCREEN_X_STRIDE_RIGHT);	//get start pixel
+	pixy = pixy + y * sal_VideoGetPitch() + x;
 	for(h=0;h<height;h++)
 	{
 		pixx=pixy;		
 		for(w=0; w<width; w++)
 		{
-			*pixx = color;
-			pixx+=SAL_SCREEN_X_STRIDE_RIGHT;
+			*pixx++ = color;
 		}
-		pixy+=SAL_SCREEN_Y_STRIDE_DOWN;
+		pixy+=sal_VideoGetPitch();
 	}
 }
 
@@ -98,19 +94,15 @@ static void sal_VideoDrawRect16(s32 x, s32 y, s32 width, s32 height, u16 color)
 	u16 *pixy = (u16*)sal_VideoGetBuffer();
 	u16 *pixx;
 	s32 h,w;
-#if SAL_SCREEN_ROTATED == 1
-	pixy+=((SAL_SCREEN_HEIGHT-1)*SAL_SCREEN_Y_STRIDE_UP);
-#endif
-	pixy+=(y*SAL_SCREEN_Y_STRIDE_DOWN)+(x*SAL_SCREEN_X_STRIDE_RIGHT);	//get start pixel
+	pixy = ((u16*) ((u8*) pixy + y * sal_VideoGetPitch())) + x;
 	for(h=0;h<height;h++)
 	{
 		pixx=pixy;		
 		for(w=0; w<width; w++)
 		{
-			*pixx = color;
-			pixx+=SAL_SCREEN_X_STRIDE_RIGHT;
+			*pixx++ = color;
 		}
-		pixy+=SAL_SCREEN_Y_STRIDE_DOWN;
+		pixy = (u16*) ((u8*) pixy + sal_VideoGetPitch());
 	}
 }
 
@@ -124,13 +116,10 @@ static void sal_VideoPrint8(s32 x, s32 y, const char *buffer, u8 color)
 {
 	s32 m,b;
 	u8 *pix = (u8*)sal_VideoGetBuffer();
-#if SAL_SCREEN_ROTATED == 1
-	pix+=((SAL_SCREEN_HEIGHT-1)*SAL_SCREEN_Y_STRIDE_UP);
-#endif
 	s32 len=0;
-	s32 maxLen=(SAL_SCREEN_WIDTH>>3)-(x>>3);
+	s32 maxLen=(sal_VideoGetWidth()>>3)-(x>>3);
 
-	pix+=(y*SAL_SCREEN_Y_STRIDE_DOWN)+(x*SAL_SCREEN_X_STRIDE_RIGHT);	//get start pixel
+	pix = pix + y * sal_VideoGetPitch() + x;
 	while(1) 
 	{
 		s8 letter = *buffer++;
@@ -150,21 +139,21 @@ static void sal_VideoPrint8(s32 x, s32 y, const char *buffer, u8 color)
 			//process 32bits of data in 8bit chunks
 			for (b=0; b<4; b++)
 			{
-				if(mask&(1<<0)) pix[SAL_SCREEN_X_STRIDE_RIGHT*0] = color;
-				if(mask&(1<<1)) pix[SAL_SCREEN_X_STRIDE_RIGHT*1] = color;
-				if(mask&(1<<2)) pix[SAL_SCREEN_X_STRIDE_RIGHT*2] = color;
-				if(mask&(1<<3)) pix[SAL_SCREEN_X_STRIDE_RIGHT*3] = color;
-				if(mask&(1<<4)) pix[SAL_SCREEN_X_STRIDE_RIGHT*4] = color;
-				if(mask&(1<<5)) pix[SAL_SCREEN_X_STRIDE_RIGHT*5] = color;
-				if(mask&(1<<6)) pix[SAL_SCREEN_X_STRIDE_RIGHT*6] = color;
-				if(mask&(1<<7)) pix[SAL_SCREEN_X_STRIDE_RIGHT*7] = color;
-				pix+=SAL_SCREEN_Y_STRIDE_DOWN; //move to next line
+				if(mask&(1<<0)) pix[0] = color;
+				if(mask&(1<<1)) pix[1] = color;
+				if(mask&(1<<2)) pix[2] = color;
+				if(mask&(1<<3)) pix[3] = color;
+				if(mask&(1<<4)) pix[4] = color;
+				if(mask&(1<<5)) pix[5] = color;
+				if(mask&(1<<6)) pix[6] = color;
+				if(mask&(1<<7)) pix[7] = color;
+				pix+=sal_VideoGetPitch(); //move to next line
 				mask>>=8; //shift mask data ready for next loop
 			}
 		}
 		//position pix pointer to start of next char
-		pix+=(SAL_SCREEN_Y_STRIDE_UP<<3);
-		pix+=(SAL_SCREEN_X_STRIDE_RIGHT<<3);
+		pix-=(sal_VideoGetPitch()<<3);
+		pix+=(1<<3);
 
 		len++;
 		if (len>=maxLen-1) break;
@@ -175,13 +164,10 @@ static void sal_VideoPrint16(s32 x, s32 y, const char *buffer, u16 color)
 {
 	s32 m,b;
 	u16 *pix = (u16*)sal_VideoGetBuffer();
-#if SAL_SCREEN_ROTATED == 1
-	pix+=((SAL_SCREEN_HEIGHT-1)*SAL_SCREEN_Y_STRIDE_UP);
-#endif
 	s32 len=0;
-	s32 maxLen=(SAL_SCREEN_WIDTH>>3)-(x>>3);
+	s32 maxLen=(sal_VideoGetWidth()>>3)-(x>>3);
 
-	pix+=(y*SAL_SCREEN_Y_STRIDE_DOWN)+(x*SAL_SCREEN_X_STRIDE_RIGHT);	//get start pixel
+	pix = ((u16*) ((u8*) pix + y * sal_VideoGetPitch())) + x;
 	while(1) 
 	{
 		s8 letter = *buffer++;
@@ -201,21 +187,20 @@ static void sal_VideoPrint16(s32 x, s32 y, const char *buffer, u16 color)
 			//process 32bits of data in 8bit chunks
 			for (b=0; b<4; b++)
 			{
-				if(mask&(1<<0)) pix[SAL_SCREEN_X_STRIDE_RIGHT*0] = color;
-				if(mask&(1<<1)) pix[SAL_SCREEN_X_STRIDE_RIGHT*1] = color;
-				if(mask&(1<<2)) pix[SAL_SCREEN_X_STRIDE_RIGHT*2] = color;
-				if(mask&(1<<3)) pix[SAL_SCREEN_X_STRIDE_RIGHT*3] = color;
-				if(mask&(1<<4)) pix[SAL_SCREEN_X_STRIDE_RIGHT*4] = color;
-				if(mask&(1<<5)) pix[SAL_SCREEN_X_STRIDE_RIGHT*5] = color;
-				if(mask&(1<<6)) pix[SAL_SCREEN_X_STRIDE_RIGHT*6] = color;
-				if(mask&(1<<7)) pix[SAL_SCREEN_X_STRIDE_RIGHT*7] = color;
-				pix+=SAL_SCREEN_Y_STRIDE_DOWN; //move to next line
+				if(mask&(1<<0)) pix[0] = color;
+				if(mask&(1<<1)) pix[1] = color;
+				if(mask&(1<<2)) pix[2] = color;
+				if(mask&(1<<3)) pix[3] = color;
+				if(mask&(1<<4)) pix[4] = color;
+				if(mask&(1<<5)) pix[5] = color;
+				if(mask&(1<<6)) pix[6] = color;
+				if(mask&(1<<7)) pix[7] = color;
+				pix=(u16*) ((u8*) pix + sal_VideoGetPitch()); //move to next line
 				mask>>=8; //shift mask data ready for next loop
 			}
 		}
 		//position pix pointer to start of next char
-		pix+=(SAL_SCREEN_Y_STRIDE_UP<<3);
-		pix+=(SAL_SCREEN_X_STRIDE_RIGHT<<3);
+		pix = (u16*) ((u8*) pix - (sal_VideoGetPitch() << 3)) + (1 << 3);
 
 		len++;
 		if (len>=maxLen-1) break;
@@ -231,29 +216,40 @@ void sal_VideoPrint(s32 x, s32 y, const char *buffer, u32 color)
 static 
 void sal_VideoClear16(u16 color)
 {
-	s32 x,y;
+	s32 x,y,w,h,pitch;
 	u16 *pix=(u16*)sal_VideoGetBuffer();
-	for (y=0;y<SAL_SCREEN_HEIGHT;y++)
+
+	w = sal_VideoGetWidth();
+	h = sal_VideoGetHeight();
+	pitch = sal_VideoGetPitch();
+
+	for (y=0;y<h;y++)
 	{
-		for (x=0;x<SAL_SCREEN_WIDTH;x++)
+		for (x=0;x<w;x++)
 		{
 			*pix++ = color;
 		}
+		pix = (u16*) ((u8*) pix + pitch - w * sizeof(u16));
 	}
 }
 
 static 
 void sal_VideoClear8(u8 color)
 {
-	s32 x,y;
+	s32 x,y,w,h,pitch;
 	u8 *pix=(u8*)sal_VideoGetBuffer();
 
-	for (y=0;y<SAL_SCREEN_HEIGHT;y++)
+	w = sal_VideoGetWidth();
+	h = sal_VideoGetHeight();
+	pitch = sal_VideoGetPitch();
+
+	for (y=0;y<h;y++)
 	{
-		for (x=0;x<SAL_SCREEN_WIDTH;x++)
+		for (x=0;x<w;x++)
 		{
 			*pix++ = color;
 		}
+		pix += pitch - w;
 	}
 }
 
@@ -664,6 +660,11 @@ const char * sal_DirectoryGetHome(void)
 	return home;
 }
 
+const char * sal_DirectoryGetUser(void)
+{
+	return getenv("HOME");
+}
+
 void sal_DirectorySplitFilename(const char *wholeFilename, s8* path, s8 *filename, s8 *ext)
 {
 	u32 len=(u32)strlen(wholeFilename);
@@ -747,27 +748,23 @@ s32 sal_ImageDrawTiled(u16 *image, u32 width, u32 height, s32 xScroll, s32 yScro
 	s16 x2=0, x3=0;
 	s16 y2=0, y3=0;
 	u16 *fbStart = (u16*)sal_VideoGetBuffer();
-#if SAL_SCREEN_ROTATED == 1
-	fbStart+=((SAL_SCREEN_HEIGHT-1)*SAL_SCREEN_Y_STRIDE_UP);
-#endif
 	u16 *fb;
-	fbStart+=(SAL_SCREEN_Y_STRIDE_DOWN*y)+(SAL_SCREEN_X_STRIDE_RIGHT*x);
+	fbStart = (u16*) ((u8*) fbStart + (y * sal_VideoGetPitch())) + x;
 	u16 *graphics1 = (u16 *)NULL;
 
 	x2=xScroll;
 	y2=(yScroll*width);
 	graphics1 = image+y2;
-	for (y3=y; y3<(SAL_SCREEN_HEIGHT); y3++)
+	for (y3=y; y3<sal_VideoGetHeight(); y3++)
 	{		
 		fb=fbStart;
-		for (x3=0; x3<(SAL_SCREEN_WIDTH-x); x3++)
+		for (x3=0; x3<(sal_VideoGetWidth()-x); x3++)
 		{
-			*fb = graphics1[x2];
-			fb+=SAL_SCREEN_X_STRIDE_RIGHT;
+			*fb++ = graphics1[x2];
 			x2++;
 			x2&=(width-1);
 		}
-		fbStart+=SAL_SCREEN_Y_STRIDE_DOWN;
+		fbStart = (u16*) ((u8*) fbStart + sal_VideoGetPitch());
 		y2+=width;
 		y2&=((height*width)-1);
 		graphics1=image+y2;
@@ -779,23 +776,82 @@ s32 sal_ImageDrawTiled(u16 *image, u32 width, u32 height, s32 xScroll, s32 yScro
 s32 sal_ImageDraw(u16 *image, u32 width, u32 height, s32 x, s32 y)
 {	
 	u16 *fbStart = (u16*)sal_VideoGetBuffer();
-#if SAL_SCREEN_ROTATED == 1
-	fbStart+=((SAL_SCREEN_HEIGHT-1)*SAL_SCREEN_Y_STRIDE_UP);
-#endif
 	u16 *fb;
 	u16 *graphics = (u16*)image;
 	u32 x2,y2;
-	fbStart+=(y*SAL_SCREEN_Y_STRIDE_DOWN)+(x*SAL_SCREEN_X_STRIDE_RIGHT);
+	fbStart = (u16*) ((u8*) fbStart + (y * sal_VideoGetPitch())) + x;
 
 	for (y2=0; y2<height; y2++)
 	{
-		fb=fbStart;		
+		fb=fbStart;
 		for (x2=0; x2<width; x2++)
 		{
-			*fb = *graphics++;
-			fb+=SAL_SCREEN_X_STRIDE_RIGHT;
+			*fb++ = *graphics++;
 		}
-		fbStart+=SAL_SCREEN_Y_STRIDE_DOWN;
+		fbStart = (u16*) ((u8*) fbStart + sal_VideoGetPitch());
+	}
+
+	return SAL_OK;
+}
+
+s32 sal_HighlightBar(s32 width, s32 height, s32 x, s32 y)
+{
+	u16 *fbStart = (u16*)sal_VideoGetBuffer();
+	u16 *blitStart = (u16*) ((u8*) fbStart + y * sal_VideoGetPitch()) + x;
+
+	//vertical stride
+	int v_stride = sal_VideoGetPitch() - (width * sizeof(u16));
+
+	int percentage_stride = (1 << 16) / width;
+	int percentage = 0;
+	int percentage_inv = (1 << 16);
+
+	int percentage_r_err = 0;
+
+	int percentage_bg_r_err = 0;
+	int percentage_bg_g_err = 0;
+	int percentage_bg_b_err = 0;
+
+	int x2, y2;
+	for (y2=0; y2 < height; y2++)
+	{
+		for (x2=0; x2 < width; x2++)
+		{
+			int bg_col = *blitStart;
+			int r, g, b, bgr, bgg, bgb;
+
+			//extract background colours
+			bgr = bg_col >> 11;
+			bgg = (bg_col >> 6) & 0x1F;
+			bgb = bg_col & 0x1F;
+
+			//propagate the error
+			percentage_bg_r_err += (percentage * bgr) & 0xFFFF;
+			percentage_bg_g_err += (percentage * bgg) & 0xFFFF;
+			percentage_bg_b_err += (percentage * bgb) & 0xFFFF;
+			percentage_r_err += (percentage_inv * 31) & 0xFFFF;
+
+			//final colour blend, dont need to do the inverse of g/b because we're only blending red with the background!
+			r =  ((31 * percentage_inv) + (percentage_r_err & ~0xFFFF)) >> 16;
+			r += ((bgr * percentage) + (percentage_bg_r_err & ~0xFFFF)) >> 16;
+			g =  ((bgg * percentage) + (percentage_bg_g_err & ~0xFFFF)) >> 16;
+			b =  ((bgb * percentage) + (percentage_bg_b_err & ~0xFFFF)) >> 16;
+
+			*blitStart++ = SAL_RGB((r > 31) ? 31 : r, g, b);
+
+			percentage += percentage_stride;
+			percentage_inv -= percentage_stride;
+
+			//If the error is > 1 (in fix16.16), cut it down to size
+			percentage_r_err &= 0xFFFF;
+			percentage_bg_r_err &= 0xFFFF;
+			percentage_bg_g_err &= 0xFFFF;
+			percentage_bg_b_err &= 0xFFFF;
+		}
+
+		blitStart = (u16*) ((u8*) blitStart + v_stride);
+		percentage = 0;
+		percentage_inv = (1 << 16);
 	}
 
 	return SAL_OK;
@@ -859,7 +915,8 @@ s32 sal_ImageLoad(const char *fname, void *dest, u32 width, u32 height)
 
 	u32 h;
 	unsigned short *dst = dest;
-	if (info_ptr->pixel_depth != 24)
+	
+	if (png_get_bit_depth(png_ptr, info_ptr) != 8 || png_get_color_type(png_ptr, info_ptr) != PNG_COLOR_TYPE_RGB)
 	{
 		sal_LastErrorSet("bg image not 24bpp");
 		png_destroy_read_struct(&png_ptr, info_ptr ? &info_ptr : NULL, (png_infopp)NULL);
@@ -867,7 +924,7 @@ s32 sal_ImageLoad(const char *fname, void *dest, u32 width, u32 height)
 		return SAL_ERROR;
 	}
 	
-	if (height != info_ptr->height)
+	if (height != png_get_image_height(png_ptr, info_ptr))
 	{
 		sal_LastErrorSet("image height invalid");
 		png_destroy_read_struct(&png_ptr, info_ptr ? &info_ptr : NULL, (png_infopp)NULL);
@@ -875,7 +932,7 @@ s32 sal_ImageLoad(const char *fname, void *dest, u32 width, u32 height)
 		return SAL_ERROR;
 	}
 	
-	if (width != info_ptr->width)
+	if (width != png_get_image_width(png_ptr, info_ptr))
 	{
 		sal_LastErrorSet("image width is invalid");
 		png_destroy_read_struct(&png_ptr, info_ptr ? &info_ptr : NULL, (png_infopp)NULL);
@@ -904,7 +961,7 @@ u32 sal_AudioRateNext(u32 currRate)
 {
 	s32 x;
 	u32 newRate;
-	for (x=0;x<sizeof(mAudioRateLookup);x++)
+	for (x=0;x<sizeof(mAudioRateLookup)/sizeof(mAudioRateLookup[0]);x++)
 	{
 		newRate=mAudioRateLookup[x];
 		if(newRate>currRate) break;
@@ -916,7 +973,7 @@ u32 sal_AudioRatePrevious(u32 currRate)
 {
 	s32 x;
 	u32 newRate;
-	for (x=sizeof(mAudioRateLookup)-1; x>=0; x--)
+	for (x=(sizeof(mAudioRateLookup)/sizeof(mAudioRateLookup[0]))-1; x>=0; x--)
 	{
 		newRate=mAudioRateLookup[x];
 		if(newRate<currRate) break;

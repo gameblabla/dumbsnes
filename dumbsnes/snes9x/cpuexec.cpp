@@ -49,129 +49,83 @@
 #include "missing.h"
 #include "apu.h"
 #include "dma.h"
-#include "fxemu.h"
 #include "sa1.h"
-#ifdef THREADCPU
-void S9xMainLoop (struct SRegisters * reg, struct SICPU * icpu, struct SCPUState * cpu)
-{
-#else
+
+#define CheckFlag(f)  (Registers.PL & (f))
+
 void S9xMainLoop (void)
 {
 	struct SICPU		* icpu  = &ICPU;
 	struct SCPUState	* cpu	= &CPU;
 	struct SRegisters	* reg	= &Registers;
-#endif
-    for (;;)
-    {
-		APU_EXECUTE ();
+   for (;;)
+	{
+    	APU_EXECUTE ();
+    
+    	if (CPU.Flags)
+    	{
+    	    if (CPU.Flags & NMI_FLAG)
+    	    {
+        		if (--CPU.NMICycleCount == 0) {
+        		    CPU.Flags &= ~NMI_FLAG;
+        		    if (CPU.WaitingForInterrupt) {
+            			CPU.WaitingForInterrupt = FALSE;
+            			CPU.PC++;
+        		    }
+        		    S9xOpcode_NMI ();
+        		}
+    	    }
 
-		if (CPU.Flags)
-		{
-			if (CPU.Flags & NMI_FLAG)
-			{
-				if (--CPU.NMICycleCount == 0)
-				{
-					CPU.Flags &= ~NMI_FLAG;
-					if (CPU.WaitingForInterrupt)
-					{
-						CPU.WaitingForInterrupt = FALSE;
-						++CPU.PC;
-					}
-					S9xOpcode_NMI ();
-				}
-			}
+    	    CHECK_SOUND ();
 
-#ifdef DEBUGGER
-			if ((CPU.Flags & BREAK_FLAG) &&
-			!(CPU.Flags & SINGLE_STEP_FLAG))
-			{
-				for (int Break = 0; Break != 6; Break++)
-				{
-					if (S9xBreakpoint[Break].Enabled &&
-					S9xBreakpoint[Break].Bank == Registers.PB &&
-					S9xBreakpoint[Break].Address == CPU.PC - CPU.PCBase)
-					{
-						if (S9xBreakpoint[Break].Enabled == 2)
-							S9xBreakpoint[Break].Enabled = TRUE;
-						else
-							CPU.Flags |= DEBUG_MODE_FLAG;
-					}
-				}
-			}
-#endif
-			CHECK_SOUND ();
+    	    if (CPU.Flags & IRQ_PENDING_FLAG)
+    	    {
+        		if (CPU.IRQCycleCount == 0)
+        		{
+        		    if (CPU.WaitingForInterrupt) {
+            			CPU.WaitingForInterrupt = FALSE;
+            			CPU.PC++;
+        		    }
+        		    if (CPU.IRQActive && !Settings.DisableIRQ) {
+            			if (!CheckFlag (IRQ))
+            			    S9xOpcode_IRQ ();
+        		    }
+        		    else
+            			CPU.Flags &= ~IRQ_PENDING_FLAG;
+        		}
+        		else
+                {
+                    if(--CPU.IRQCycleCount==0 && CheckFlag (IRQ))
+                        CPU.IRQCycleCount=1;
+                }
+    	    }
 
-			if (CPU.Flags & IRQ_PENDING_FLAG)
-			{
-				if (CPU.IRQCycleCount == 0)
-				{
-					if (CPU.WaitingForInterrupt)
-					{
-						CPU.WaitingForInterrupt = FALSE;
-						CPU.PC++;
-					}
-					if (CPU.IRQActive && !Settings.DisableIRQ)
-					{
-						if (!CHECKFLAG (IRQ))
-							S9xOpcode_IRQ ();
-					}
-					else
-						CPU.Flags &= ~IRQ_PENDING_FLAG;
-				}
-				else
-					CPU.IRQCycleCount--;
-			}
-#ifdef DEBUGGER
-			if (CPU.Flags & DEBUG_MODE_FLAG)
-				break;
-#endif
-			if (CPU.Flags & SCAN_KEYS_FLAG)
-				break;
-#ifdef DEBUGGER
-			if (CPU.Flags & TRACE_FLAG)
-				S9xTrace ();
+    	    if (CPU.Flags & SCAN_KEYS_FLAG)
+	        	break;
+    	}
 
-			if (CPU.Flags & SINGLE_STEP_FLAG)
-			{
-				CPU.Flags &= ~SINGLE_STEP_FLAG;
-				CPU.Flags |= DEBUG_MODE_FLAG;
-			}
-#endif
-		} //if (CPU.Flags)
 #ifdef CPU_SHUTDOWN
-		CPU.PCAtOpcodeStart = CPU.PC;
+    	CPU.PCAtOpcodeStart = CPU.PC;
 #endif
-#ifdef VAR_CYCLES
-		CPU.Cycles += CPU.MemSpeed;
-#else
-		CPU.Cycles += ICPU.Speed [*CPU.PC];
-#endif
-		(*ICPU.S9xOpcodes [*CPU.PC++].S9xOpcode) (&Registers, &ICPU, &CPU);
+    	CPU.Cycles += CPU.MemSpeed;
+
+    	(*ICPU.S9xOpcodes [*CPU.PC++].S9xOpcode) (&Registers, &ICPU, &CPU);
 	
-		if (SA1.Executing)
-			S9xSA1MainLoop ();
-		DO_HBLANK_CHECK();
-	} // for(;;)
+    	if (SA1.Executing)
+    	    S9xSA1MainLoop ();
+    	DO_HBLANK_CHECK();
+    }
+
     Registers.PC = CPU.PC - CPU.PCBase;
     S9xPackStatus ();
-    APURegisters.PC = IAPU.PC - IAPU.RAM;
+    Registers.PC = IAPU.PC - IAPU.RAM;
     S9xAPUPackStatus ();
     if (CPU.Flags & SCAN_KEYS_FLAG)
     {
-#ifdef DEBUGGER
-		if (!(CPU.Flags & FRAME_ADVANCE_FLAG))
-#endif
-			S9xSyncSpeed ();
-		CPU.Flags &= ~SCAN_KEYS_FLAG;
-    }
-    if (CPU.BRKTriggered && Settings.SuperFX && !CPU.TriedInterleavedMode2)
-    {
-		CPU.TriedInterleavedMode2 = TRUE;
-		CPU.BRKTriggered = FALSE;
-		S9xDeinterleaveMode2 ();
+	    S9xSyncSpeed ();
+        CPU.Flags &= ~SCAN_KEYS_FLAG;
     }
 }
-
 
 void S9xSetIRQ (uint32 source)
 {
@@ -206,7 +160,6 @@ void S9xDoHBlankProcessing ()
 	break;
 
     case HBLANK_END_EVENT:
-	S9xSuperFXExec ();
 
 #ifndef STORM
 	if (Settings.SoundSync)
