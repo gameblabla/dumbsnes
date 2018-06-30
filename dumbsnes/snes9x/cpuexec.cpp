@@ -61,7 +61,7 @@ void S9xMainLoop (void)
    for (;;)
 	{
     	APU_EXECUTE ();
-    
+
     	if (CPU.Flags)
     	{
     	    if (CPU.Flags & NMI_FLAG)

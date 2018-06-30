@@ -1,7 +1,7 @@
 
 # Define the applications properties here:
 
-TARGET = dumbsnes.elf
+TARGET = dumbsnes_tr.elf
 
 CHAINPREFIX=/opt/rs97-toolchain
 CROSS_COMPILE=$(CHAINPREFIX)/usr/bin/mipsel-linux-
@@ -17,7 +17,7 @@ INCLUDE = -I pocketsnes \
 		-I dumbsnes/include \
 		-I menu -I dumbsnes/linux -I dumbsnes/snes9x
 
-CFLAGS =  -std=gnu++03 $(INCLUDE) -DRC_OPTIMIZED -D__LINUX__ -D__DINGUX__ -DFOREVER_16_BIT  $(SDL_CFLAGS)
+CFLAGS =  -std=gnu++03 $(INCLUDE) -DRC_OPTIMIZED -D__LINUX__ -D__DINGUX__ -DFOREVER_16_BIT -DTRANSPARENCY_SLOW $(SDL_CFLAGS)
 
 CFLAGS +=  -O2 -fdata-sections -ffunction-sections -mips32 -march=mips32 -mno-mips16 -fomit-frame-pointer -fno-builtin  \
             -fno-common -Wno-write-strings -Wno-sign-compare -ffast-math -ftree-vectorize \

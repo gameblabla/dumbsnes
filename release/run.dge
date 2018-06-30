@@ -1,0 +1,50 @@
+#!/bin/sh
+list="cdd3c8c37322978ca8669b34bc89c804
+4e4f8f4cfdaabffdde20c8053202d4f0
+7bb0487eacdb78d6635e89d797e5ab74
+4f17a1a17a098d0a5312703b55ad134b
+608c22b8ff930c62dc2de54bcd6eba72
+ebb2b17c18846d952242fc4c55285123
+2947bd08df041aa116f908448e8d914e
+03a63945398191337e896e5771f77173
+9bcd78c38f4d999087718881703b3e9b
+3f3730f9bfb6ab74085801af16b155a9
+ecfb3bd489a15cdda12066100bde0378
+9c698db37d1fc2435cd04ad2da0e553b
+21f3e98df4780ee1c667b84e57d88675
+3d64f89499a403d17d530388854a7da5"
+
+fx="ce1e3e33b6e39d37b43d7de599f9e785
+cb472164c5a71ccd3739963390ec6a50
+b6cf9bd3c7c5b5f596ef81da37648f0f
+c464855c3ee3cd6652dc42fc4bb2be38
+05f0b393e491ae879cd1e729341c9430
+9f235e4c17cf9762a49b83e82794d278
+cef1055e9b4a2be56ea7810c07976c17
+def66db12f5e644c0cf00c42cfa7ae7b
+700f0a4b0d161669ea4a7e7385c6c16f
+9dce6a9dcbe4e304d67b9e8fd8999e7e
+71e8a70dd4a17b8278d03d74c8372e77
+d84e0e30dadf7b1f1782d6c832b655ca
+9a668dce0a5589e7209949f441f0180e
+f3daa875b6e20b01690617c9b8f6e843
+e28e24f1d82d8e8392561571a000d2c2
+01633ba7e39e0ded24bdc23e8ad80320
+7fd753db14083bbd07282b4779cf30ae"
+
+md5=`md5sum $1 | awk '{ print $1 }'`
+var=`echo "$fx" | grep "$md5"`
+if [ ! -z "$var" ]; then
+	#Super FX Game dectected ! They are not compatible with DumbSNES!
+	exit 0
+fi
+
+var=`echo "$list" | grep "$md5"`
+
+if [ ! -z "$var" ]; then
+#"Rom detected, running with Transparency on"
+./dumbsnes_tr.elf $1
+else
+# Rom not blacklisted, running with default version
+./dumbsnes.elf $1
+fi
