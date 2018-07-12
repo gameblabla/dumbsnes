@@ -216,13 +216,7 @@ u32 sal_VideoInit(u32 bpp)
 	mBpp=bpp;
 
 	//Set up the screen
-	mScreen = SDL_SetVideoMode( 320, 480, bpp, SDL_HWSURFACE/* |
-#ifdef SDL_TRIPLEBUF
-		SDL_TRIPLEBUF
-#else
-		SDL_DOUBLEBUF
-#endif*/
-		);
+	mScreen = SDL_SetVideoMode( 320, 480, bpp, SDL_HWSURFACE);
     dma_map_buffer();
     	//If there was an error in setting up the screen
     	if( mScreen == NULL )
@@ -232,14 +226,14 @@ u32 sal_VideoInit(u32 bpp)
     	}
 
     	// lock surface if needed 
-	if (SDL_MUSTLOCK(mScreen)) 
+	/*if (SDL_MUSTLOCK(mScreen)) 
 	{ 
 		if (SDL_LockSurface(mScreen) < 0) 
 		{ 
 			sal_LastErrorSet("unable to lock surface"); 
 			return SAL_ERROR;
 		} 
-	}
+	}*/
    
 	return SAL_OK;
 }
@@ -270,8 +264,8 @@ void sal_VideoEnterGame(u32 fullscreenOption, u32 pal, u32 refreshRate)
 		Width = SAL_SCREEN_WIDTH;
 		Height = SAL_SCREEN_HEIGHT;
 	}
-	if (SDL_MUSTLOCK(mScreen))
-		SDL_UnlockSurface(mScreen);
+	/*if (SDL_MUSTLOCK(mScreen))
+		SDL_UnlockSurface(mScreen);*/
 	mScreen = SDL_SetVideoMode(320, 480, mBpp, SDL_HWSURFACE/* |
 #ifdef SDL_TRIPLEBUF
 		SDL_TRIPLEBUF
@@ -280,8 +274,8 @@ void sal_VideoEnterGame(u32 fullscreenOption, u32 pal, u32 refreshRate)
 #endif*/
 		);
 	mRefreshRate = refreshRate;
-	if (SDL_MUSTLOCK(mScreen))
-		SDL_LockSurface(mScreen);
+	/*if (SDL_MUSTLOCK(mScreen))
+		SDL_LockSurface(mScreen);*/
 #endif
 }
 
@@ -296,12 +290,12 @@ void sal_VideoSetPAL(u32 fullscreenOption, u32 pal)
 void sal_VideoExitGame()
 {
 #ifdef GCW_ZERO
-	if (SDL_MUSTLOCK(mScreen))
-		SDL_UnlockSurface(mScreen);
+	/*if (SDL_MUSTLOCK(mScreen))
+		SDL_UnlockSurface(mScreen);*/
 	mScreen = SDL_SetVideoMode(320, 480, mBpp, SDL_HWSURFACE/* | SDL_DOUBLEBUF*/);
 
-	if (SDL_MUSTLOCK(mScreen))
-		SDL_LockSurface(mScreen);
+	/*if (SDL_MUSTLOCK(mScreen))
+		SDL_LockSurface(mScreen);*/
 #endif
 }
 
