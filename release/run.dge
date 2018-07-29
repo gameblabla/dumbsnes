@@ -12,7 +12,12 @@ ebb2b17c18846d952242fc4c55285123
 ecfb3bd489a15cdda12066100bde0378
 9c698db37d1fc2435cd04ad2da0e553b
 21f3e98df4780ee1c667b84e57d88675
-3d64f89499a403d17d530388854a7da5"
+3d64f89499a403d17d530388854a7da5
+7f25ce5a283d902694c52fb1152fa61a
+f7afa112d7ec1d532636703e4b02700a
+f9fe266e91632e68b558d6b43393eaba
+9b6142ae845235d29fb572a061ea419d
+"
 
 fx="ce1e3e33b6e39d37b43d7de599f9e785
 cb472164c5a71ccd3739963390ec6a50
@@ -32,7 +37,7 @@ e28e24f1d82d8e8392561571a000d2c2
 01633ba7e39e0ded24bdc23e8ad80320
 7fd753db14083bbd07282b4779cf30ae"
 
-md5=`md5sum $1 | awk '{ print $1 }'`
+md5=`md5sum "$1" | awk '{ print $1 }'`
 var=`echo "$fx" | grep "$md5"`
 if [ ! -z "$var" ]; then
 	#Super FX Game dectected ! They are not compatible with DumbSNES!
@@ -43,8 +48,8 @@ var=`echo "$list" | grep "$md5"`
 
 if [ ! -z "$var" ]; then
 #"Rom detected, running with Transparency on"
-./dumbsnes_tr.elf $1
+./dumbsnes_tr.elf "$1"
 else
 # Rom not blacklisted, running with default version
-./dumbsnes.elf $1
+./dumbsnes.elf "$1"
 fi

@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include "rs97_dma.h"
+
 #define SAL_OK						1
 #define SAL_ERROR					0
 #define SAL_TRUE					1
@@ -63,9 +63,7 @@ void sal_VideoSetPAL(u32 fullscreenOption, u32 pal);
 void sal_VideoExitGame();
 u32 sal_VideoGetPitch();
 void sal_VideoFlip(s32 vsync);
-#define sal_VideoGetBuffer() ((void*)dma_ptr)
-
-// void *sal_VideoGetBuffer();
+void *sal_VideoGetBuffer();
 void sal_VideoPaletteSet(u32 index, u32 color);
 void sal_VideoPaletteSync();
 void sal_VideoBitmapScale(int startx, int starty, int viswidth, int visheight, int newwidth, int newheight,int pitch, u16 *src, u16 *dst);

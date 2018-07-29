@@ -19,7 +19,7 @@ INCLUDE = -I pocketsnes \
 
 CFLAGS =  -std=gnu++03 $(INCLUDE) -DRC_OPTIMIZED -D__LINUX__ -D__DINGUX__ -DFOREVER_16_BIT -DTRANSPARENCY_SLOW $(SDL_CFLAGS)
 
-CFLAGS +=  -O2 -fdata-sections -ffunction-sections -mips32 -march=mips32 -mno-mips16 -fomit-frame-pointer -fno-builtin  \
+CFLAGS +=  -O2 -fdata-sections -ffunction-sections -mips32 -msym32 -mplt -mlong-calls -march=mips32 -mno-mips16 -fomit-frame-pointer -fno-builtin  \
             -fno-common -Wno-write-strings -Wno-sign-compare -ffast-math -ftree-vectorize \
 			-funswitch-loops -fno-strict-aliasing
  

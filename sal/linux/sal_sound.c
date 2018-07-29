@@ -37,12 +37,12 @@ static void sdl_audio_callback (void *userdata, Uint8 *stream, int len)
 	}
 	else if (LocalReadPos + SamplesRequested > BUFFER_SAMPLES)
 	{
-		memcpy(stream, &Buffer[LocalReadPos * BytesPerSample], (BUFFER_SAMPLES - LocalReadPos) * BytesPerSample);
-		memcpy(&stream[(BUFFER_SAMPLES - LocalReadPos) * BytesPerSample], &Buffer[0], (SamplesRequested - (BUFFER_SAMPLES - LocalReadPos)) * BytesPerSample);
+		memmove(stream, &Buffer[LocalReadPos * BytesPerSample], (BUFFER_SAMPLES - LocalReadPos) * BytesPerSample);
+		memmove(&stream[(BUFFER_SAMPLES - LocalReadPos) * BytesPerSample], &Buffer[0], (SamplesRequested - (BUFFER_SAMPLES - LocalReadPos)) * BytesPerSample);
 	}
 	else
 	{
-		memcpy(stream, &Buffer[LocalReadPos * BytesPerSample], len);
+		memmove(stream, &Buffer[LocalReadPos * BytesPerSample], len);
 	}
 	ReadPos = (LocalReadPos + SamplesRequested) % BUFFER_SAMPLES;
 }
@@ -70,7 +70,7 @@ s32 sal_AudioInit(s32 rate, s32 bits, s32 stereo, s32 Hz)
 		buffer*=2;
 	}
 	audiospec.samples = buffer;
-	
+
 	if (SDL_OpenAudio(&audiospec, NULL) < 0) {
 		fprintf(stderr, "Unable to initialize audio.\n");
 		return SAL_ERROR;

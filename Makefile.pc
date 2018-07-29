@@ -4,11 +4,11 @@
 TARGET = dumbsnes.elf
 
 CHAINPREFIX=/opt/rs97-toolchain
-CROSS_COMPILE=$(CHAINPREFIX)/usr/bin/mipsel-linux-
+CROSS_COMPILE=
 CC = $(CROSS_COMPILE)gcc
 CXX = $(CROSS_COMPILE)g++
 STRIP = $(CROSS_COMPILE)strip
-SYSROOT     := $(CHAINPREFIX)/usr/mipsel-buildroot-linux-uclibc/sysroot
+SYSROOT     := 
 SDL_CFLAGS  := $(shell $(SYSROOT)/usr/bin/sdl-config --cflags)
 SDL_LIBS    := $(shell $(SYSROOT)/usr/bin/sdl-config --libs)
 
@@ -19,9 +19,7 @@ INCLUDE = -I pocketsnes \
 
 CFLAGS =  -std=gnu++03 $(INCLUDE) -DRC_OPTIMIZED -D__LINUX__ -D__DINGUX__ -DFOREVER_16_BIT  $(SDL_CFLAGS)
 
-CFLAGS +=  -O2 -fdata-sections -ffunction-sections -mips32 -march=mips32 -msym32 -mplt -mlong-calls -mno-mips16 -fomit-frame-pointer -fno-builtin  \
-            -fno-common -Wno-write-strings -Wno-sign-compare -ffast-math -ftree-vectorize \
-			-funswitch-loops -fno-strict-aliasing
+CFLAGS +=  -O0 -g -m32
  
 CFLAGS += -DGCW_ZERO -DMIPS_XBURST -DFAST_LSB_WORD_ACCESS -DNO_ROM_BROWSER
 CXXFLAGS = $(CFLAGS) -fno-exceptions -fno-rtti -fno-math-errno -fno-threadsafe-statics
