@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <SDL/SDL.h>
 #include "unzip.h"
 #include "zip.h"
 #include "menu.h"
@@ -23,7 +22,7 @@
 #define FIXED_POINT_REMAINDER 0xffffUL
 #define FIXED_POINT_SHIFT 16
 
-static struct MENU_OPTIONS mMenuOptions;
+struct MENU_OPTIONS mMenuOptions;
 static int mEmuScreenHeight;
 static int mEmuScreenWidth;
 static char mRomName[SAL_MAX_PATH]={""};
@@ -145,6 +144,7 @@ void S9xLoadSDD1Data (void)
 
 u16 IntermediateScreen[SNES_WIDTH * SNES_HEIGHT_EXTENDED];
 bool LastPAL; /* Whether the last frame's height was 239 (true) or 224. */
+uint8_t PAL = 0;
 
 bool8_32 S9xInitUpdate ()
 {
@@ -168,7 +168,7 @@ bool8_32 S9xDeinitUpdate (int Width, int Height, bool8_32)
 
 	// If the height changed from 224 to 239, or from 239 to 224,
 	// possibly change the resolution.
-	bool PAL = !!(Memory.FillRAM[0x2133] & 4);
+	PAL = !!(Memory.FillRAM[0x2133] & 4);
 	if (PAL != LastPAL)
 	{
 		sal_VideoSetPAL(mMenuOptions.fullScreen, PAL);
@@ -702,12 +702,13 @@ void _splitpath (const char *path, char *drive, char *dir, char *fname,
 
 extern "C"
 {
+	
+	s32 event=EVENT_NONE;
+
 
 int mainEntry(int argc, char* argv[])
 {
 	int ref = 0;
-
-	s32 event=EVENT_NONE;
 
 	sal_Init();
 	sal_VideoInit(16);

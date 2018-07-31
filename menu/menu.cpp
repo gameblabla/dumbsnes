@@ -1180,23 +1180,23 @@ void MainMenuUpdateText(s32 menu_index)
 			}
 			break;
 
-		// case MENU_FULLSCREEN:
-		// 	switch(mMenuOptions->fullScreen)
-		// 	{
-		// 		case 0:
-		// 			strcpy(mMenuText[MENU_FULLSCREEN],"Full screen:               OFF");
-		// 			break;
-		// 		case 1:
-		// 			strcpy(mMenuText[MENU_FULLSCREEN],"Full screen:              FAST");
-		// 			break;  
-		// 		case 2:
-		// 			strcpy(mMenuText[MENU_FULLSCREEN],"Full screen:            SMOOTH");
-		// 			break;  
-		// 		case 3:
-		// 			strcpy(mMenuText[MENU_FULLSCREEN],"Full screen:          HARDWARE");
-		// 			break;
-		// 	}
-		// 	break;
+		 case MENU_FULLSCREEN:
+			switch(mMenuOptions->fullScreen)
+			{
+				case 0:
+				strcpy(mMenuText[MENU_FULLSCREEN],"Full screen:               OFF");
+				break;
+				case 1:
+				strcpy(mMenuText[MENU_FULLSCREEN],"Full screen:              FAST");
+				break;  
+				/*case 2:
+				strcpy(mMenuText[MENU_FULLSCREEN],"Full screen:            SMOOTH");
+				break;  
+				case 3:
+				strcpy(mMenuText[MENU_FULLSCREEN],"Full screen:          HARDWARE");
+				break;*/
+			}
+		break;
 			
 		case MENU_LOAD_GLOBAL_SETTINGS:
 			strcpy(mMenuText[MENU_LOAD_GLOBAL_SETTINGS],"Load global settings");
@@ -1245,7 +1245,7 @@ void MainMenuUpdateTextAll(void)
 	MainMenuUpdateText(MENU_FRAMESKIP);
 	MainMenuUpdateText(MENU_FPS);
 	MainMenuUpdateText(MENU_SOUND_SYNC);
-	// MainMenuUpdateText(MENU_FULLSCREEN);
+	MainMenuUpdateText(MENU_FULLSCREEN);
 	MainMenuUpdateText(MENU_LOAD_GLOBAL_SETTINGS);
 	MainMenuUpdateText(MENU_SAVE_GLOBAL_SETTINGS);
 	MainMenuUpdateText(MENU_LOAD_CURRENT_SETTINGS);
@@ -1305,6 +1305,7 @@ void MenuInit(const char *systemDir, struct MENU_OPTIONS *menuOptions)
 
 
 extern "C" void S9xSaveSRAM(int showWarning);
+extern "C" void sal_Clear();
 
 s32 MenuRun(s8 *romName)
 {
@@ -1322,16 +1323,10 @@ s32 MenuRun(s8 *romName)
 		return action;
 	}
 
-#if 0
-	if((mMenuOptions->autoSaveSram) && (mRomName[0]!=0))
-	{
-		MenuMessageBox("Saving SRAM...","","",MENU_MESSAGE_BOX_MODE_MSG);
-		S9xSaveSRAM(0);
-	}
-#endif
-
 	MainMenuUpdateTextAll();
 	sal_InputIgnore();
+	
+	sal_Clear();
 
 	while (!menuExit)
 	{
@@ -1586,25 +1581,32 @@ s32 MenuRun(s8 *romName)
 					MainMenuUpdateText(MENU_FPS);
 					break;
 
-				// case MENU_FULLSCREEN:
-				// 	if (keys & SAL_INPUT_RIGHT)
-				// 	{
-				// 		mMenuOptions->fullScreen = (mMenuOptions->fullScreen + 1) % 4;
-				// 	}
-				// 	else
-				// 	{
-				// 		if (mMenuOptions->fullScreen == 0)
-				// 			mMenuOptions->fullScreen = 3;
-				// 		else
-				// 			mMenuOptions->fullScreen--;
-				// 	}
-				// 	MainMenuUpdateText(MENU_FULLSCREEN);
-				// 	break;
+				case MENU_FULLSCREEN:
+					if (keys & SAL_INPUT_RIGHT)
+					{
+						mMenuOptions->fullScreen = (mMenuOptions->fullScreen + 1) % 4;
+					}
+					else
+					{
+						if (mMenuOptions->fullScreen == 0)
+						mMenuOptions->fullScreen = 1;
+						else
+						mMenuOptions->fullScreen--;
+					}
+					if (mMenuOptions->fullScreen > 1) mMenuOptions->fullScreen = 0;
+					MainMenuUpdateText(MENU_FULLSCREEN);
+					break;
 			}
 		}
 
 		usleep(10000);
 	}
+	
+	if (action == EVENT_RUN_ROM)
+	{
+		sal_Clear();
+	}
+	
 	
   sal_InputWaitForRelease();
 

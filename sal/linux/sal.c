@@ -3,6 +3,7 @@
 #include <SDL.h>
 #include <sys/time.h>
 #include "sal.h"
+#include "menu.h"
 
 #define PALETTE_BUFFER_LENGTH	256*2*4
 #define SNES_WIDTH  256
@@ -198,11 +199,49 @@ void sal_VideoBitmapDim(u16* img, u32 pixelCount)
 		img[i - 1] = (img[i - 1] & 0xF7DE) >> 1;
 }
 
+extern uint8_t PAL;
+extern struct MENU_OPTIONS mMenuOptions;
+extern s32 event;
+
+void sal_Clear()
+{
+	memset(rs97Screen->pixels, 0, (320*480)*2);
+}
+
 void sal_VideoFlip(s32 vsync)
 {
 	uint32_t *s = (uint32_t*)mScreen->pixels;
 	uint32_t *d = (uint32_t*)rs97Screen->pixels + (SAL_SCREEN_WIDTH - SNES_WIDTH) / 4;
-	for(uint8_t y = 0; y < 240; y++, s += SAL_SCREEN_WIDTH/2, d += 320) memmove(d, s, SAL_SCREEN_WIDTH*2);
+	uint32_t *d2 = (uint32_t*)rs97Screen->pixels;
+	uint8_t y;
+	
+	if(event==EVENT_RUN_ROM)
+	{
+		switch (mMenuOptions.fullScreen)
+		{
+			case 0:
+				for(y = 0; y < 240; y++, s += SAL_SCREEN_WIDTH/2, d += 320) memmove(d, s, SAL_SCREEN_WIDTH*2);
+			break;
+			default:
+			if (PAL)
+				upscale_256x240_to_320x240((uint32_t*) d2, (uint32_t*) s, 320);
+			else
+				upscale_256x224_to_320x240((uint32_t*) d2, (uint32_t*) s, 320);
+			break;
+			/*case 2:
+			upscale_256x240_to_320x240_bilinearish((uint32_t*) d2, (uint32_t*) s, 320);
+			if (PAL) {
+				upscale_256x240_to_320x240_bilinearish((uint32_t*) d2, (uint32_t*) s, 320);
+			} else {
+				upscale_256x224_to_320x240_bilinearish((uint32_t*) d2, (uint32_t*) s, 320);
+			}
+			break;*/
+		}
+	}
+	else
+	{
+		for(y = 0; y < 240; y++, s += SAL_SCREEN_WIDTH/2, d += 320) memmove(d, s, SAL_SCREEN_WIDTH*2);
+	}
 
 	// SDL_Flip(mScreen);
 }
